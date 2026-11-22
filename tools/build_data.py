@@ -55,6 +55,9 @@ def is_core(d, books=CORE_BOOKS):
     return bool(p.get("remaster")) and (books is None or p.get("title") in books)
 
 
+# Player Core master abilities (the familiar-abilities pack mixes both kinds)
+MASTER_ABILITIES = {"Cantrip Connection", "Extra Reagents", "Familiar Focus", "Familiar Spell", "Lifelink", "Spell Battery", "Spell Delivery"}
+
 SAVE = {"fortitude": "Fortitude", "reflex": "Reflex", "will": "Will"}
 
 
@@ -401,6 +404,18 @@ def main(root):
     write("armor", armor)
     write("shields", shields)
     write("gear", gear)
+
+    # ---------- familiar and master abilities (Remaster books) ----------
+    fam = []
+    for d in load_all(f"{root}/familiar-abilities/*.json"):
+        if not pub(d).get("remaster"):
+            continue
+        s = d["system"]
+        html = s["description"]["value"]
+        fam.append({"name": d["name"], "master": "master ability" in html.lower()[:200] or d["name"] in MASTER_ABILITIES,
+                    "rarity": rarity(d), "source": pub(d).get("title"), "desc": clean(html, 600)})
+    fam.sort(key=lambda x: x["name"])
+    write("familiar-abilities", fam)
 
     # ---------- conditions + actions ----------
     conds = [d for d in load_all(f"{root}/conditions/*.json") if pub(d).get("remaster")]

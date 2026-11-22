@@ -7,6 +7,7 @@ import {
   CHARACTER_WEALTH, startingGold, RUNE_PRICES, RUNE_LEVELS, equipmentValue, fmtGp,
 } from "./shared/rules.js";
 import { autoBuild } from "./companions.js";
+import { petsSection } from "./pets.js";
 
 const shortSource = (s) => String(s || "").replace(/^Pathfinder (Lost Omens )?/, "");
 
@@ -25,7 +26,7 @@ export function blankCharacter(level = 1) {
     skills: { trained: [], increases: {}, lore: [] }, feats: {}, choices: {},
     spells: { cantrips: [], known: {}, slotOverrides: {} },
     equipment: { armor: "", armorRunes: { potency: 0, resilient: 0 }, shield: "", weapons: [], items: [], gold: 15, budget: null },
-    languages: [], notes: "", color: "#3b6ea5",
+    languages: [], notes: "", color: "#3b6ea5", pets: [],
   };
 }
 
@@ -553,7 +554,7 @@ export function mountBuilder(container, initial, { onSave, onCancel, title = "Ch
     form.append(basics(), attributes(), skills(), feats());
     const sp = spells();
     if (sp) form.append(sp);
-    form.append(equipment(), extras());
+    form.append(equipment(), petsSection(c, { render, num: (FULL_CASTERS.includes(c.class) ? 6 : 5) + 1 }), extras());
     form.style.minHeight = "";
     for (const [el, y] of scrollers) el.scrollTop = y;
     if (window.scrollY !== wy) window.scrollTo(0, wy);

@@ -177,8 +177,7 @@ export async function autoBuild({ level = 1, className = null, name = null } = {
 }
 
 // --------------------------------------------------------------------
-// Turn suggestions for AI companions (rules-based; the optional Claude
-// assistant can also narrate them).
+// Turn suggestions for companions (rules-based)
 // --------------------------------------------------------------------
 export function suggestTurn(char, state, data) {
   const comp = computeCharacter(char, data);

@@ -159,7 +159,7 @@ export function randomName(ancestry = "human") {
   return pick(s[0]) + pick(s[1]) + (Math.random() < 0.4 ? " " + pick(SYL.human[0]) + pick(["wood", "ford", "hall", "smith", "brook", "stone", "well", "ward"]) : "");
 }
 
-export function npcGenerator(state, { onAddToPlot, askAI }) {
+export function npcGenerator(state, { onAddToPlot }) {
   const out = h("div", { class: "npc-out" });
   let anc = "human";
   const gen = () => {
@@ -175,7 +175,6 @@ export function npcGenerator(state, { onAddToPlot, askAI }) {
       h("p", { class: "muted" }, `Making them Friendly: Make an Impression, Diplomacy vs Will DC ~${dcForLevel(+state.plot.partyLevel || 1)} (standard DC for party level).`),
       h("div", { class: "row" },
         h("button", { class: "primary", onclick: () => onAddToPlot(npc) }, "Add to plot NPCs"),
-        askAI ? h("button", { onclick: async (e) => { e.target.disabled = true; try { const r = await askAI("npc", `${npc.name}, ${npc.ancestry} ${npc.role}. ${npc.description}`); out.append(h("div", { class: "ai-out" }, r.text)); } catch (err) { toast(err.message, "error"); } e.target.disabled = false; } }, "✨ Dialogue lines") : null,
         h("button", { onclick: gen }, "Another"))));
   };
   return h("div", {}, h("div", { class: "row" }, select(Object.keys(SYL).map((k) => ({ value: k, label: cap(k) })), anc, (v) => { anc = v; gen(); }), h("button", { onclick: gen }, "Generate NPC")), out);
@@ -242,14 +241,13 @@ export function dcHelper(state) {
 // ------------------------------------------------------------------
 // Scene brief: pulls everything relevant to one location together
 // ------------------------------------------------------------------
-export function sceneBrief(state, loc, { onMap, onHandout, askAI }) {
+export function sceneBrief(state, loc, { onMap, onHandout }) {
   const p = state.plot;
   const lvl = +p.partyLevel || 1;
   const text = `${loc.name} ${loc.description || ""}`.toLowerCase();
   const npcs = (p.npcs || []).filter((n) => text.includes(n.name.toLowerCase().split(" ")[0]) || (n.location || "") === loc.name || `${n.description}`.toLowerCase().includes(loc.name.toLowerCase()));
   const secrets = (p.secrets || []).filter((s) => s.location === loc.name || s.text.toLowerCase().includes(loc.name.toLowerCase()));
   const notes = state.notes.filter((n) => n.text.toLowerCase().includes(loc.name.toLowerCase()));
-  const aiBox = h("div", {});
   return h("div", { class: "scene-brief" },
     h("p", { class: "muted" }, `${cap(loc.type || "location")} · party level ${lvl}`),
     loc.description ? h("p", {}, loc.description) : null,
@@ -262,10 +260,7 @@ export function sceneBrief(state, loc, { onMap, onHandout, askAI }) {
     h("p", {}, `Easy DC ${dcForLevel(lvl) - 2} · Standard DC ${dcForLevel(lvl)} · Hard DC ${dcForLevel(lvl) + 2} · Very hard DC ${dcForLevel(lvl) + 5}`),
     h("div", { class: "row wrap" },
       h("button", { class: "primary", onclick: () => onMap(loc) }, "Generate map for this location"),
-      h("button", { onclick: () => onHandout({ kind: "notice", title: loc.name, body: loc.description || "", meta: { heading: loc.name } }) }, "Handout about it"),
-      askAI ? h("button", { onclick: async (e) => { e.target.disabled = true; try { const r = await askAI("readaloud", `Describe the party arriving at ${loc.name}: ${loc.description}`); clear(aiBox).append(h("div", { class: "ai-out" }, r.text)); } catch (err) { toast(err.message, "error"); } e.target.disabled = false; } }, "✨ Read-aloud text") : null,
-      askAI ? h("button", { onclick: async (e) => { e.target.disabled = true; try { const r = await askAI("scene", `Location: ${loc.name}. ${loc.description}`); clear(aiBox).append(h("div", { class: "ai-out" }, r.text)); } catch (err) { toast(err.message, "error"); } e.target.disabled = false; } }, "✨ Scene plan") : null),
-    aiBox);
+      h("button", { onclick: () => onHandout({ kind: "notice", title: loc.name, body: loc.description || "", meta: { heading: loc.name } }) }, "Handout about it")));
 }
 
 export { editHandout, creatureLoreHandout };

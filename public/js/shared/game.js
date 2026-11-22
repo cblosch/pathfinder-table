@@ -184,7 +184,7 @@ export function applyAction(game, auth, type, p = {}) {
     case "kick": {
       dmOnly();
       const slot = game.slots[+p.slot];
-      if (!isDM && slot.type === "player" && slot.index !== auth.slot) throw new Error("Without a GM, players can only remove AI companions.");
+      if (!isDM && slot.type === "player" && slot.index !== auth.slot) throw new Error("Without a GM, players can only remove companions.");
       if (slot.characterId) delete game.characters[slot.characterId];
       game.slots[+p.slot] = { index: +p.slot, type: "open" };
       return;
@@ -195,8 +195,8 @@ export function applyAction(game, auth, type, p = {}) {
       if (!slot || slot.type !== "open") throw new Error("That seat isn't open.");
       const cid = id();
       game.characters[cid] = { ...p.character, id: cid, slot: slot.index, companion: true };
-      game.slots[slot.index] = { index: slot.index, type: "companion", playerName: "AI companion", characterId: cid, personality: str(p.personality, 300) };
-      pushLog(game, { type: "system", text: `${p.character?.name || "A companion"} joins the party as an AI companion.` });
+      game.slots[slot.index] = { index: slot.index, type: "companion", playerName: "companion", characterId: cid, personality: str(p.personality, 300) };
+      pushLog(game, { type: "system", text: `${p.character?.name || "A companion"} joins the party as a companion.` });
       return;
     }
 

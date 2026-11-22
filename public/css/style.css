@@ -712,3 +712,9 @@ details.sell { margin-top: .6em; }
 details.sell summary { cursor: pointer; font-variant: small-caps; letter-spacing: .04em; }
 .grid3 > .span-all, .grid2 > .span-all { grid-column: 1 / -1; }
 .span-all select { max-width: 44em; }
+
+/* Pets */
+.pet-edit { border-top: 1px dotted var(--line); padding-top: .6em; margin-top: .6em; }
+.pet-edit h4 .tag { margin-left: .5em; font-size: .75em; }
+.statblock.pet { margin-top: .6em; }
+.pets .statblock.pet { margin-top: 0; }

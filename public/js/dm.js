@@ -17,6 +17,7 @@ export async function mountDM(app, { home } = {}) {
   let state = null;
   let aiOn = false;
   try { aiOn = (await config()).ai; } catch {}
+  // The only AI feature: writing handout text
   const ai = aiOn ? (task, prompt) => askAI(task, prompt) : null;
 
   const header = h("header", { class: "topbar" });
@@ -186,7 +187,7 @@ export async function mountDM(app, { home } = {}) {
   }
 
   function notesTab() {
-    const text = h("textarea", { rows: 3, placeholder: "Something just happened? Jot it down. Notes feed the scene briefs and AI assistant. Tick 'share' to tell the players." });
+    const text = h("textarea", { rows: 3, placeholder: "Something just happened? Jot it down. Notes feed the scene briefs. Tick 'share' to tell the players." });
     const share = h("input", { type: "checkbox" });
     const tags = h("input", { placeholder: "tags, comma separated", style: { width: "14em" } });
     const add = async () => {
@@ -212,8 +213,7 @@ export async function mountDM(app, { home } = {}) {
     draw();
     return h("div", {},
       h("section", { class: "bsec" }, h("h3", {}, "Add information as it comes up"), text,
-        h("div", { class: "row" }, tags, h("label", { class: "check" }, share, " Share with players"), h("button", { class: "primary", onclick: add }, "Add note (Ctrl+Enter)"),
-          ai ? h("button", { onclick: async (e) => { e.target.disabled = true; try { const r = await ai("recap", "Write a recap of the session so far."); modal("Session recap", h("div", {}, h("p", { class: "pre" }, r.text), h("button", { onclick: () => act("addNote", { text: r.text, public: true, tags: ["recap"] }) }, "Share recap with players"))); } catch (err) { toast(err.message, "error"); } e.target.disabled = false; } }, "✨ Session recap") : null)),
+        h("div", { class: "row" }, tags, h("label", { class: "check" }, share, " Share with players"), h("button", { class: "primary", onclick: add }, "Add note (Ctrl+Enter)"))),
       h("div", { class: "row" }, h("input", { placeholder: "Filter notes…", oninput: (e) => { filter = e.target.value.toLowerCase(); draw(); } })),
       list);
   }
@@ -235,7 +235,7 @@ export async function mountDM(app, { home } = {}) {
       const c = s.characterId ? state.characters[s.characterId] : null;
       const comp = c ? computeCharacter(c, coreData()) : null;
       const card = h("div", { class: `seat-card ${s.type}` },
-        h("div", { class: "row between" }, h("strong", {}, `Seat ${s.index + 1}`), h("span", { class: "tag" }, s.type === "open" ? "open" : s.type === "companion" ? "AI companion" : s.playerName)),
+        h("div", { class: "row between" }, h("strong", {}, `Seat ${s.index + 1}`), h("span", { class: "tag" }, s.type === "open" ? "open" : s.type === "companion" ? "companion" : s.playerName)),
         c ? h("div", {}, h("h4", {}, c.name), h("p", { class: "muted" }, `Level ${c.level} ${c.ancestry} ${c.class}`),
           h("p", {}, `HP ${c.live?.hp ?? comp.maxHp}/${comp.maxHp} · AC ${comp.ac} · Perception ${comp.perception >= 0 ? "+" : ""}${comp.perception}`),
           (c.live?.conditions || []).length ? h("p", { class: "warn" }, c.live.conditions.map((x) => x.name + (x.value ? " " + x.value : "")).join(", ")) : null)
@@ -246,13 +246,13 @@ export async function mountDM(app, { home } = {}) {
         h("button", { class: "small", onclick: () => editBuild(s, c) }, "Edit build"),
         h("button", { class: "small", onclick: () => companionTurn(c) }, "Suggest turn"));
       if (s.type === "player" && c) actions.append(h("button", { class: "small", onclick: () => editBuild(s, c) }, "Edit build"));
-      if (s.type === "open") actions.append(h("button", { class: "small primary", onclick: () => fillDialog(s) }, "Fill with AI companion"));
+      if (s.type === "open") actions.append(h("button", { class: "small primary", onclick: () => fillDialog(s) }, "Fill with companion"));
       else actions.append(h("button", { class: "small", onclick: async () => (await confirmDialog(`Free seat ${s.index + 1}? Their character will be removed.`, { ok: s.type === "companion" ? "Remove" : "Kick", danger: true })) && act("kick", { slot: s.index }) }, s.type === "companion" ? "Remove" : "Kick"));
       card.append(actions);
       grid.append(card);
     }
     box.append(grid,
-      state.slots.some((s) => s.type === "open") ? h("button", { onclick: async () => { for (const s of state.slots.filter((x) => x.type === "open")) await fillCompanion(s, null, ""); } }, "Fill all open seats with AI companions") : null);
+      state.slots.some((s) => s.type === "open") ? h("button", { onclick: async () => { for (const s of state.slots.filter((x) => x.type === "open")) await fillCompanion(s, null, ""); } }, "Fill all open seats with companions") : null);
     return box;
   }
 
@@ -268,7 +268,7 @@ export async function mountDM(app, { home } = {}) {
     const suggested = ["Cleric", "Fighter", "Rogue", "Wizard", "Bard", "Ranger", "Champion", "Druid"].find((c) => !taken.has(c)) || "";
     const cls = groupedSelect(classGroups(coreData().classes), suggested, () => {}, { first: { value: "", label: "Random" } });
     const pers = h("input", { placeholder: "e.g. cheerful, reckless, devout to Sarenrae" });
-    const m = modal(`Fill seat ${s.index + 1} with an AI companion`, h("div", {},
+    const m = modal(`Fill seat ${s.index + 1} with a companion`, h("div", {},
       h("p", { class: "hint" }, `Builds a complete level ${state.plot.partyLevel || 1} character (set party level in the Plot tab). ${suggested ? `Suggested: ${suggested}, which the party doesn't have yet.` : ""} You run it, with turn suggestions from the initiative tracker${ai ? " and the AI assistant" : ""}.`),
       field("Class", cls), field("Personality", pers),
       h("button", { class: "primary", onclick: async () => { await fillCompanion(s, cls.value, pers.value); m.close(); toast("Companion created"); } }, "Create companion")));
@@ -290,22 +290,13 @@ export async function mountDM(app, { home } = {}) {
 
   function companionTurn(c) {
     const { lines, comp } = suggestTurn(c, state, coreData());
-    const aiBox = h("div", {});
     const roll = (mod, label) => act("roll", { formula: `1d20${mod >= 0 ? "+" : ""}${mod}`, label: `${c.name}: ${label}`, as: c.name });
     modal(`${c.name}'s turn`, h("div", {},
       h("ul", {}, lines.map((l) => h("li", {}, l))),
       h("div", { class: "row wrap" }, comp.strikes.slice(0, 3).map((s) => [
         h("button", { class: "small", onclick: () => roll(s.attack, `${s.name} Strike`) }, `${s.name} ${s.attack >= 0 ? "+" : ""}${s.attack}`),
         h("button", { class: "small", onclick: () => act("roll", { formula: s.damage, label: `${c.name}: ${s.name} damage`, as: c.name }) }, s.damage)])),
-      ai ? h("button", { onclick: async (e) => {
-        e.target.disabled = true;
-        try {
-          const map = activeMap();
-          const r = await ai("companion", `Companion: ${c.name}, level ${c.level} ${c.ancestry} ${c.class}. HP ${c.live?.hp ?? comp.maxHp}/${comp.maxHp}, AC ${comp.ac}. Strikes: ${comp.strikes.map((s) => `${s.name} +${s.attack} ${s.damage}`).join("; ")}. Spells: ${[...(c.spells?.cantrips || []), ...Object.values(c.spells?.known || {}).flat()].join(", ") || "none"}. Feats: ${Object.values(c.feats || {}).join(", ")}. Initiative order: ${state.initiative.entries.map((e) => e.name).join(", ")}. Visible enemies on map: ${(map?.tokens || []).filter((t) => t.kind === "enemy" && !t.hidden).map((t) => t.label).join(", ") || "unknown"}. Rule-based suggestion: ${lines.join(" ")}`);
-          clear(aiBox).append(h("div", { class: "ai-out" }, r.text), h("button", { class: "small", onclick: () => act("chat", { text: r.text.split("\n").pop(), as: c.name }) }, "Say last line in chat"));
-        } catch (err) { toast(err.message, "error"); }
-        e.target.disabled = false;
-      } }, "✨ Ask the AI to play this turn") : null, aiBox,
+
       h("details", {}, h("summary", {}, "Full sheet"), renderSheet(c, { editable: true, rollAs: c.name, compact: true }))), { wide: true });
   }
 
@@ -361,7 +352,6 @@ export async function mountDM(app, { home } = {}) {
         locs.length ? h("div", { class: "row wrap" }, locs.map((l) => h("button", { onclick: () => openBrief(l) }, l.name))) : h("p", { class: "muted" }, "Add locations in the Plot tab to get briefs that pull together NPCs, clues, DCs and maps.")),
       h("section", { class: "bsec" }, h("h3", {}, "DC helper"), dcHelper(state)),
       h("section", { class: "bsec" }, h("h3", {}, "NPC generator"), npcGenerator(state, {
-        askAI: ai,
         onAddToPlot: async (npc) => { const plot = structuredClone(state.plot); plot.npcs = [...(plot.npcs || []), { id: Math.random().toString(36).slice(2, 9), ...npc }]; await act("setPlot", { plot }); toast(`${npc.name} added to the plot`); },
       })),
       h("section", { class: "bsec" }, h("h3", {}, "Treasure"), lootGenerator(state, { onHandout: (ho) => handoutDialog(ho) })));
@@ -369,34 +359,7 @@ export async function mountDM(app, { home } = {}) {
   }
 
   function openBrief(loc) {
-    modal(`Scene: ${loc.name}`, sceneBrief(state, loc, { askAI: ai, onMap: (l) => mapForLocation(l), onHandout: (ho) => handoutDialog(ho) }), { wide: true });
-  }
-
-  function assistantTab() {
-    if (!ai) return h("div", { class: "empty" },
-      h("h3", {}, "AI assistant is off"),
-      h("p", {}, "Everything else works without it. To turn it on, install the optional dependency and start the server with an Anthropic API key:"),
-      h("pre", {}, "npm install\nANTHROPIC_API_KEY=sk-ant-... npm start"),
-      h("p", {}, "It then writes read-aloud text, handouts, NPC dialogue, scene plans, recaps and AI companion turns, grounded in your plot and notes."));
-    const task = select([
-      { value: "ask", label: "Ask a rules / GM question" }, { value: "readaloud", label: "Read-aloud description" },
-      { value: "scene", label: "Plan the next scene" }, { value: "npc", label: "NPC dialogue" },
-      { value: "handout", label: "Handout text" }, { value: "recap", label: "Session recap" }], "ask", () => {});
-    const prompt = h("textarea", { rows: 4, placeholder: "e.g. The party just kicked in the crypt door. What do they see?" });
-    const out = h("div", { class: "ai-out" });
-    const go = async (e) => {
-      e.target.disabled = true; out.textContent = "Thinking…";
-      try { const r = await ai(task.value, prompt.value); out.textContent = r.text; }
-      catch (err) { out.textContent = ""; toast(err.message, "error"); }
-      e.target.disabled = false;
-    };
-    return h("div", {},
-      h("p", { class: "hint" }, "Uses your plot, NPC secrets, session notes and recent chat as context. Players never see this tab. Check rules answers against Archives of Nethys."),
-      field("Task", task), prompt, h("button", { class: "primary", onclick: go }, "Ask"), out,
-      h("div", { class: "row" },
-        h("button", { class: "small", onclick: () => out.textContent && act("addNote", { text: out.textContent, tags: ["ai"] }).then(() => toast("Saved to notes")) }, "Save as note"),
-        h("button", { class: "small", onclick: () => out.textContent && handoutDialog({ kind: "custom", title: "", body: out.textContent }) }, "Make handout"),
-        h("button", { class: "small", onclick: () => out.textContent && act("chat", { text: out.textContent }) }, "Post to chat")));
+    modal(`Scene: ${loc.name}`, sceneBrief(state, loc, { onMap: (l) => mapForLocation(l), onHandout: (ho) => handoutDialog(ho) }), { wide: true });
   }
 
   const showCreature = async (name) => {
@@ -420,7 +383,6 @@ export async function mountDM(app, { home } = {}) {
     { id: "shops", label: "Shops", icon: "🏪", render: () => shopsPanel(state, { gm: true }) },
     { id: "tools", label: "GM tools", icon: "🧰", render: toolsTab },
     { id: "reference", label: "Rules", icon: "📚", render: () => referencePanel({ isDM: true }) },
-    { id: "assistant", label: "Assistant", icon: "✨", short: "AI", render: assistantTab },
   ], { persistKey: `pftable.dmtab.${session.code}`, onChange: (id) => { if (id === "play") { seenLog = state.log.length; logPanel.scrollDown(); tabset.updateBar(); } } });
 
   function playTab() {

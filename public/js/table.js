@@ -88,7 +88,7 @@ function initiativeAddRow(getState) {
   return h("details", { class: "ini-add" }, h("summary", {}, "Add combatant"),
     h("div", { class: "row" }, name, init, hp,
       h("button", { class: "small", onclick: () => { if (!name.value) return; act("initiative", { op: "add", name: name.value, init: +init.value || 0, hp: hp.value ? +hp.value : null, kind: "enemy" }); name.value = ""; init.value = ""; hp.value = ""; } }, "Add")),
-    h("button", { class: "small", onclick: () => addCompanionsToInitiative(getState()) }, "Roll for AI companions"));
+    h("button", { class: "small", onclick: () => addCompanionsToInitiative(getState()) }, "Roll for companions"));
 }
 
 // ------------------------------------------------------------

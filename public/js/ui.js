@@ -119,7 +119,14 @@ export function tabs(defs, { onChange, initial, persistKey } = {}) {
     onChange && onChange(id);
   };
   render();
-  onLayoutChange(render);
+  // Switching between phone and desktop layouts only redraws the tab bar, so
+  // whatever is open (an unsaved character, say) survives a window resize.
+  onLayoutChange(() => {
+    const before = current;
+    fix();
+    drawBar();
+    if (current !== before) { clear(body); body.append(defs.find((d) => d.id === current).render()); }
+  });
   return { el: h("div", { class: "tabset" }, bar, body), select, refresh: render, updateBar: drawBar, get current() { return current; } };
 }
 
