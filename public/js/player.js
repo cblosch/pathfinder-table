@@ -1,4 +1,5 @@
 import { h, clear, tabs, toast, copyText, modal, isMobile, onLayoutChange, actionSheet, themeToggle } from "./ui.js";
+import { shopsPanel } from "./shops.js";
 import { act, connect, session, shareInfo, canPrint, isArtifact, onWaitingForGM, config, askAI, saveToLibrary, forget } from "./transport.js";
 import { pickFromLibrary } from "./library.js";
 import { generateMap, MAP_TYPES } from "./map.js";
@@ -110,7 +111,7 @@ export function mountPlayer(app, { home } = {}) {
     if (!state.gmless) return null;
     let type = "dungeon";
     return h("div", { class: "row wrap scroll-row table-tools" },
-      state.maps?.length ? selectEl([{ value: "", label: "— map —" }, ...state.maps.map((m) => ({ value: m.id, label: m.name }))], state.activeMapId || "", (v) => v && act("setActiveMap", { id: v })) : null,
+      state.maps?.length ? selectEl([{ value: "", label: "Choose a map…" }, ...state.maps.map((m) => ({ value: m.id, label: m.name }))], state.activeMapId || "", (v) => v && act("setActiveMap", { id: v })) : null,
       selectEl(Object.entries(MAP_TYPES).map(([value, label]) => ({ value, label })), type, (v) => (type = v)),
       h("button", { class: "small", onclick: () => newMap(type) }, "+ New map"),
       state.map ? h("button", { class: "small", onclick: () => act("placeParty") }, "Place party") : null,
@@ -180,6 +181,7 @@ export function mountPlayer(app, { home } = {}) {
       { id: "fight", label: "Fight", icon: "⚔️", render: () => encounterBuilder(state, { onSpawn: (creatures) => act("spawnEncounter", { creatures }).then(() => { toast("The fight is on! See initiative."); tabset.select(isMobile() ? "play" : "map"); }).catch((e) => toast(e.message, "error")) }) },
     ] : []),
     { id: "handouts", label: "Handouts", icon: "📜", primary: !state.gmless, badge: () => unseen(), render: handoutsTab },
+    { id: "shops", label: "Shops", icon: "🏪", badge: () => (state.shops || []).filter((x) => x.open).length, render: () => shopsPanel(state, { gm: !!state.gmless, myCharId: state.slots[state.me.slot]?.characterId || null }) },
     { id: "party", label: "Party", icon: "👥", render: partyTab },
     { id: "notes", label: "Journal", icon: "📓", render: notesTab },
     { id: "rules", label: "Rules", icon: "📚", render: () => referencePanel({ isDM: false }) },
@@ -271,6 +273,7 @@ export function mountPlayer(app, { home } = {}) {
   connect((s) => {
     if (first) clear(main);
     const prevHandouts = state?.handouts.length || 0;
+    const prevOpen = new Set((state?.shops || []).filter((x) => x.open).map((x) => x.id));
     state = s;
     mapView.setSlot(s.me.slot);
     drawHeader();
@@ -278,6 +281,8 @@ export function mountPlayer(app, { home } = {}) {
     logPanel.update(state);
     if (first) { seenLog = state.log.length; tabset = makeTabs(); main.append(tabset.el); first = false; return; }
     if (state.handouts.length > prevHandouts && tabset.current !== "handouts") toast("📜 You received a handout!");
+    const opened = (state.shops || []).find((x) => x.open && !prevOpen.has(x.id));
+    if (opened && tabset.current !== "shops") toast(`🏪 ${opened.name} is open. See the Shops tab.`);
     const cur = tabset.current;
     if (cur === "play") seenLog = state.log.length;
     tabset.updateBar();

@@ -31,9 +31,18 @@ def load_all(pattern):
             d = json.load(open(f, encoding="utf-8"))
         except Exception:
             continue
-        if isinstance(d, dict) and "system" in d:
+        if isinstance(d, dict) and "system" in d and not is_excluded(d):
             out.append(d)
     return out
+
+
+# Books left out entirely (the Beginner Box has simplified, non-standard rules)
+EXCLUDED_BOOKS = ("Beginner Box",)
+
+
+def is_excluded(d):
+    title = pub(d).get("title") or ""
+    return any(b in title for b in EXCLUDED_BOOKS)
 
 
 def pub(d):
@@ -121,7 +130,26 @@ def actions(s):
     return ""
 
 
+def no_em_dash(v):
+    """The app shows no em dashes: empty cells become "-", asides become commas."""
+    if isinstance(v, str):
+        if "\u2014" not in v:
+            return v
+        if v.strip() == "\u2014":
+            return "-"
+        v = re.sub(r">\s*\u2014\s*<", ">-<", v)
+        v = re.sub(r"\s*\u2014\s*([.,;:!?)])", r"\1", v)
+        v = re.sub(r"(^|>|\()\s*\u2014\s*", r"\1", v)
+        return re.sub(r"\s*\u2014\s*", ", ", v)
+    if isinstance(v, list):
+        return [no_em_dash(x) for x in v]
+    if isinstance(v, dict):
+        return {k: no_em_dash(x) for k, x in v.items()}
+    return v
+
+
 def write(name, data):
+    data = no_em_dash(data)
     os.makedirs(OUT, exist_ok=True)
     p = os.path.join(OUT, name + ".json")
     with open(p, "w", encoding="utf-8") as f:

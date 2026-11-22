@@ -2,6 +2,7 @@
 // browser when the app is hosted without a server (see cloud.js).
 import { rollDice, degreeOfSuccess, DEGREES } from "./dice.js";
 import { visibleFrom } from "./vision.js";
+import { startingGold } from "./rules.js";
 
 export const MAX_PLAYERS = 6;
 const bytes = (n) => globalThis.crypto.getRandomValues(new Uint8Array(n));
@@ -26,6 +27,7 @@ export function createGame(code, name, opts = {}) {
     characters: {},
     maps: [], activeMapId: null,
     handouts: [],
+    shops: [],
     log: [],
     initiative: { active: false, round: 1, turn: 0, entries: [] },
   };
@@ -74,6 +76,7 @@ export function viewFor(game, auth) {
     characters: game.characters,
     map: activeMap ? fogView(activeMap) : null,
     handouts: game.handouts.filter((h) => h.to === "all" || (Array.isArray(h.to) && h.to.includes(slot))),
+    shops: (game.shops || []).filter((s) => shared || s.open).map((s) => (shared ? s : { ...s, gmNotes: undefined })),
     log: game.log.filter((l) => !l.private || l.slot === slot).slice(-200),
     initiative: {
       ...game.initiative,
@@ -123,6 +126,14 @@ export function applyAction(game, auth, type, p = {}) {
   // In a GM-less game every seated player can use the GM's table tools.
   const gm = isDM || (!!game.gmless && auth.role === "player");
   const dmOnly = () => { if (!gm) throw new Error("Only the GM can do that."); };
+
+  // whose purse a shop action uses: your own character, or (GM) any character
+  const buyerFor = (cid) => {
+    const ch = game.characters[cid] || (mySlot ? game.characters[mySlot.characterId] : null);
+    if (!ch) throw new Error("You need a character at the table to trade.");
+    if (!isDM && !(gm && ch.companion) && ch.slot !== auth.slot) throw new Error("That isn't your character.");
+    return ch;
+  };
 
   switch (type) {
     // ----- chat & dice -----
@@ -411,6 +422,82 @@ export function applyAction(game, auth, type, p = {}) {
         }
       }
       if (!lines.length) pushLog(game, { type: "system", text: `${e.name} misses ${target.name}.` });
+      return;
+    }
+
+    // ----- shops -----
+    // Money: equipment.budget is a character's total wealth and equipment.gold
+    // their coins. Buying turns coins into an item (wealth unchanged), selling
+    // turns an item into half its price in coins, and the GM can hand out gold.
+    case "saveShop": {
+      dmOnly();
+      const sh = p.shop || {};
+      game.shops ||= [];
+      const clean = {
+        id: sh.id || id(), name: str(sh.name, 80) || "Shop", kind: str(sh.kind, 40), keeper: str(sh.keeper, 80), level: Math.max(0, Math.min(25, sh.level | 0)),
+        markup: Math.max(-90, Math.min(400, +sh.markup || 0)), buys: sh.buys !== false, open: !!sh.open, blurb: str(sh.blurb, 600), gmNotes: str(sh.gmNotes, 600),
+        stock: (sh.stock || []).slice(0, 120).map((it) => ({ name: str(it.name, 100), level: it.level | 0, price: Math.max(0, +it.price || 0), type: str(it.type, 30), cat: str(it.cat || "gear", 10), qty: it.qty == null || it.qty === "" ? null : Math.max(0, it.qty | 0), traits: (it.traits || []).slice(0, 8).map((t) => str(t, 30)) })),
+      };
+      const i = game.shops.findIndex((x) => x.id === clean.id);
+      const wasOpen = i >= 0 && game.shops[i].open;
+      if (i >= 0) game.shops[i] = clean; else game.shops.push(clean);
+      if (clean.open && !wasOpen) pushLog(game, { type: "system", text: `${clean.name} is open for business.` });
+      return clean.id;
+    }
+    case "deleteShop": dmOnly(); game.shops = (game.shops || []).filter((x) => x.id !== p.id); return;
+    case "shopBuy": {
+      const shop = (game.shops || []).find((x) => x.id === p.shopId);
+      if (!shop || (!shop.open && !gm)) throw new Error("That shop isn't open.");
+      const item = shop.stock.find((x) => x.name === p.item);
+      if (!item) throw new Error("That item isn't in stock.");
+      const qty = Math.max(1, Math.min(100, p.qty | 0 || 1));
+      if (item.qty != null && item.qty < qty) throw new Error(`Only ${item.qty} left.`);
+      const ch = buyerFor(p.characterId);
+      const e = (ch.equipment ||= { weapons: [], items: [], gold: 0 });
+      e.items ||= [];
+      const each = Math.round(item.price * (1 + (shop.markup || 0) / 100) * 100) / 100;
+      const cost = Math.round(each * qty * 100) / 100;
+      if ((e.gold || 0) + 1e-9 < cost) throw new Error(`${ch.name || "You"} can't afford that (${cost} gp; you have ${e.gold || 0} gp).`);
+      if (e.budget == null) e.budget = startingGold(ch.level);
+      e.gold = Math.round(((e.gold || 0) - cost) * 100) / 100;
+      const have = e.items.find((x) => x.name === item.name && (x.price ?? each) === each);
+      if (have) have.qty = (have.qty || 1) + qty;
+      else e.items.push({ name: item.name, qty, price: each, ...(item.cat && item.cat !== "gear" ? { cat: item.cat } : {}) });
+      if (item.qty != null) item.qty -= qty;
+      pushLog(game, { type: "system", text: `${ch.name} bought ${qty > 1 ? qty + "× " : ""}${item.name} at ${shop.name} for ${cost} gp.` });
+      return;
+    }
+    case "shopSell": {
+      const shop = (game.shops || []).find((x) => x.id === p.shopId);
+      if (!shop || (!shop.open && !gm)) throw new Error("That shop isn't open.");
+      if (shop.buys === false) throw new Error(`${shop.name} doesn't buy goods.`);
+      const ch = buyerFor(p.characterId);
+      const e = ch.equipment || {};
+      const idx = (e.items || []).findIndex((x) => x.name === p.item);
+      if (idx < 0) throw new Error("You don't have that.");
+      const it = e.items[idx];
+      const qty = Math.max(1, Math.min(it.qty || 1, p.qty | 0 || 1));
+      const each = +p.price >= 0 && it.price == null ? +p.price : (it.price || 0);
+      const paid = Math.round((each / 2) * qty * 100) / 100; // items sell for half price
+      if (e.budget == null) e.budget = startingGold(ch.level);
+      e.budget = Math.round((e.budget - (each - each / 2) * qty) * 100) / 100;
+      e.gold = Math.round(((e.gold || 0) + paid) * 100) / 100;
+      if ((it.qty || 1) > qty) it.qty -= qty; else e.items.splice(idx, 1);
+      pushLog(game, { type: "system", text: `${ch.name} sold ${qty > 1 ? qty + "× " : ""}${it.name} to ${shop.name} for ${paid} gp.` });
+      return;
+    }
+    case "giveGold": {
+      dmOnly();
+      const ch = game.characters[p.characterId];
+      if (!ch) throw new Error("No such character.");
+      const amt = Math.round((+p.amount || 0) * 100) / 100;
+      if (!amt) return;
+      const e = (ch.equipment ||= { weapons: [], items: [], gold: 0 });
+      if (e.gold + amt < 0) throw new Error(`${ch.name} only has ${e.gold} gp.`);
+      if (e.budget == null) e.budget = startingGold(ch.level);
+      e.budget = Math.round((e.budget + amt) * 100) / 100;
+      e.gold = Math.round(((e.gold || 0) + amt) * 100) / 100;
+      pushLog(game, { type: "system", text: amt > 0 ? `${ch.name} receives ${amt} gp.` : `${ch.name} pays ${-amt} gp.` });
       return;
     }
 

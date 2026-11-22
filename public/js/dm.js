@@ -1,4 +1,5 @@
 import { h, clear, cap, tabs, toast, modal, field, select, copyText, debounce, isMobile, onLayoutChange, actionSheet, confirmDialog, promptDialog, formDialog, MODE, groupedSelect, classGroups, themeToggle } from "./ui.js";
+import { shopsPanel } from "./shops.js";
 import { act, connect, session, askAI, config, shareInfo, exportGame, canPrint, isArtifact } from "./transport.js";
 import { coreData, load } from "./data.js";
 import { createMapView, generateMap, MAP_TYPES, visibleFrom, TERRAIN } from "./map.js";
@@ -69,7 +70,7 @@ export async function mountDM(app, { home } = {}) {
   function tableTab() {
     const m = activeMap();
     const wrap = h("div", { class: "table-tab" });
-    const mapSel = select([{ value: "", label: state.maps.length ? "— choose map —" : "No maps yet" }, ...state.maps.map((x) => ({ value: x.id, label: x.name }))], state.activeMapId || "", (v) => act("setActiveMap", { id: v || null }));
+    const mapSel = select([{ value: "", label: state.maps.length ? "Choose a map…" : "No maps yet" }, ...state.maps.map((x) => ({ value: x.id, label: x.name }))], state.activeMapId || "", (v) => act("setActiveMap", { id: v || null }));
     wrap.append(h("div", { class: "row wrap scroll-row" },
       h("strong", { class: "hide-mobile" }, "Shown to players: "), mapSel,
       h("button", { class: "small", onclick: () => tabset.select("maps") }, "+ New map"),
@@ -405,7 +406,7 @@ export async function mountDM(app, { home } = {}) {
   };
 
   // ---------------- tabs ----------------
-  const LIVE = new Set(["table", "notes", "party", "handouts", "maps"]);
+  const LIVE = new Set(["table", "notes", "party", "handouts", "maps", "shops"]);
   let tabset;
   const makeTabs = () => tabs([
     { id: "table", label: "Table", icon: "🗺️", short: "Map", primary: true, render: tableTab },
@@ -416,6 +417,7 @@ export async function mountDM(app, { home } = {}) {
     { id: "maps", label: "Maps", icon: "🧭", render: mapsTab },
     { id: "handouts", label: "Handouts", icon: "📜", render: handoutsTab },
     { id: "encounters", label: "Encounters", icon: "⚔️", short: "Fights", render: () => encounterBuilder(state, { getActiveMap: activeMap }) },
+    { id: "shops", label: "Shops", icon: "🏪", render: () => shopsPanel(state, { gm: true }) },
     { id: "tools", label: "GM tools", icon: "🧰", render: toolsTab },
     { id: "reference", label: "Rules", icon: "📚", render: () => referencePanel({ isDM: true }) },
     { id: "assistant", label: "Assistant", icon: "✨", short: "AI", render: assistantTab },
@@ -463,7 +465,7 @@ export async function mountDM(app, { home } = {}) {
     ];
     clear(header).append(
       h("button", { class: "small exit-btn", title: "Leave this screen and go back to your games", onclick: () => home && home() }, "‹ Exit"),
-      h("span", { class: "title" }, state.name, state.plot.title ? h("span", { class: "hide-mobile" }, ` — ${state.plot.title}`) : null),
+      h("span", { class: "title" }, state.name, state.plot.title ? h("span", { class: "hide-mobile" }, `: ${state.plot.title}`) : null),
       h("span", { class: "tag" }, "GM"),
       h("span", { class: "spacer" }),
       h("button", { class: "small code-btn", title: share.inviteLabel, onclick: () => copyText(share.invite) }, h("span", { class: "hide-mobile" }, "Join code "), h("strong", { class: "code" }, state.code)),

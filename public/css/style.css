@@ -6,7 +6,7 @@
   --parchment: #f3e4c0; --parchment-ink: #3b2a14; --radius: 6px;
   --shadow: 0 1px 0 var(--line), 0 6px 18px var(--page-shade);
   --font-display: "IM Fell English", "IM FELL English", Georgia, "Times New Roman", serif;
-  --font-body: "Crimson Pro", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --font-body: "Fondamento", "Crimson Pro", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   font-family: var(--font-body); color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -680,3 +680,35 @@ body {
 }
 .picker-btn, .picker-btn small { font-variant: normal; letter-spacing: 0; }
 .custom-heritage { background: transparent; border-top: 1px dashed var(--line); padding-top: .6em; margin-top: .6em; }
+.chip.on.flaw { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.boost-row .chip:disabled.on { opacity: 1; }
+.boost-row .lbl { min-width: 15em; }
+
+/* Fonts: handwritten body (Fondamento) in every control, dropdowns included */
+input, select, textarea, option, optgroup { font-family: var(--font-body); font-size: 1rem; color: var(--ink); }
+select { font-variant: normal; letter-spacing: 0; }
+optgroup { font-style: normal; font-weight: 700; }
+
+/* Money & shops */
+.purse { border: 1px solid var(--line); border-radius: 6px; padding: .6em .8em; margin: .4em 0 .8em; background: color-mix(in srgb, var(--panel) 70%, transparent); }
+.purse.over { border-color: var(--accent); }
+.purse-row { display: flex; flex-wrap: wrap; align-items: center; gap: .5em 1em; margin: .25em 0; }
+.purse-row .lbl { font-variant: small-caps; letter-spacing: .04em; color: var(--muted); }
+.purse .hint { margin: .3em 0 0; }
+.gear-list { display: flex; flex-direction: column; gap: .25em; margin: .3em 0 .6em; }
+.gear-row { display: grid; grid-template-columns: minmax(10em, 1fr) auto auto; align-items: center; gap: .3em 1em; padding: .25em 0; border-bottom: 1px dotted var(--line); }
+.gear-row .qty { display: inline-flex; align-items: center; gap: .4em; }
+.gear-row .qty span { min-width: 1.5em; text-align: center; }
+.table-wrap { overflow-x: auto; }
+table.stock { width: 100%; border-collapse: collapse; margin: .4em 0; }
+table.stock th, table.stock td { padding: .3em .5em; border-bottom: 1px dotted var(--line); text-align: left; vertical-align: middle; }
+table.stock th { font-variant: small-caps; letter-spacing: .04em; color: var(--muted); font-weight: 400; }
+table.stock .num { text-align: right; white-space: nowrap; }
+table.stock tr.sold-out td { opacity: .5; }
+.shop.closed { opacity: .85; }
+.shop .tag { margin-left: .5em; font-size: .7em; vertical-align: middle; }
+.shop-draft { margin-top: .6em; }
+details.sell { margin-top: .6em; }
+details.sell summary { cursor: pointer; font-variant: small-caps; letter-spacing: .04em; }
+.grid3 > .span-all, .grid2 > .span-all { grid-column: 1 / -1; }
+.span-all select { max-width: 44em; }

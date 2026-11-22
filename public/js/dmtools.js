@@ -55,7 +55,7 @@ export function encounterBuilder(state, { getActiveMap, onSpawn } = {}) {
         h("td", {}, h("button", { class: "link", onclick: () => modal(e.creature.name, statBlock(e.creature), { wide: true }) }, e.creature.name)),
         h("td", {}, `lvl ${e.creature.level}`), h("td", {}, `${creatureXP(e.creature.level, lvl) * e.count} XP`),
         h("td", {}, h("button", { class: "icon", onclick: () => { enc.splice(i, 1); drawEnc(); } }, "✕")))))),
-      h("p", {}, h("strong", {}, `${xp} XP — ${threatFor(xp, size)}`), h("small", { class: "muted" }, ` (party of ${size} at level ${lvl}: ${budget.map((b) => `${b.threat} ${b.xp}`).join(", ")})`)),
+      h("p", {}, h("strong", {}, `${xp} XP, ${threatFor(xp, size)}`), h("small", { class: "muted" }, ` (party of ${size} at level ${lvl}: ${budget.map((b) => `${b.threat} ${b.xp}`).join(", ")})`)),
       enc.length && onSpawn ? h("div", { class: "row wrap" },
         h("button", { class: "primary", onclick: async () => { await onSpawn(enc.map((e) => ({ name: e.creature.name, level: e.creature.level, hp: e.creature.hp, ac: e.creature.ac, perception: e.creature.perception, size: e.creature.size, strikes: e.creature.strikes, count: e.count }))); enc.length = 0; drawEnc(); } }, "Start the fight"),
         h("button", { onclick: () => { enc.length = 0; drawEnc(); } }, "Clear"),
@@ -64,7 +64,7 @@ export function encounterBuilder(state, { getActiveMap, onSpawn } = {}) {
         h("button", { class: "primary", onclick: () => toInitiative(false) }, "Add to initiative"),
         h("button", { onclick: () => toInitiative(true) }, "Add hidden"),
         getActiveMap ? h("button", { onclick: placeTokens }, "Place tokens on map") : null,
-        h("button", { onclick: () => act("addNote", { text: `Encounter: ${enc.map((e) => `${e.count}× ${e.creature.name} (${e.creature.level})`).join(", ")} — ${xp} XP ${threatFor(xp, size)}` , tags: ["encounter"] }).then(() => toast("Saved to notes")) }, "Save to notes"),
+        h("button", { onclick: () => act("addNote", { text: `Encounter: ${enc.map((e) => `${e.count}× ${e.creature.name} (${e.creature.level})`).join(", ")}; ${xp} XP ${threatFor(xp, size)}` , tags: ["encounter"] }).then(() => toast("Saved to notes")) }, "Save to notes"),
         h("button", { onclick: () => { enc.length = 0; drawEnc(); } }, "Clear")) : h("p", { class: "muted" }, "Add creatures from the list, or let the tool suggest an encounter."));
   }
 
@@ -236,7 +236,7 @@ export function dcHelper(state) {
     out,
     h("p", { class: "muted" }, `Simple DCs: ${Object.entries(SIMPLE_DC).map(([k, v]) => `${k} ${v}`).join(" · ")}`),
     h("div", { class: "row" }, "Ask for a secret check: ",
-      ...["Perception", "Stealth", "Recall Knowledge"].map((s) => h("button", { class: "small", onclick: () => act("chat", { text: `🎲 Everyone, roll ${s}! (DC ${dcForLevel(lvl) + DC_ADJUST[adj] + RARITY_ADJUST[rarity]} — the GM will tell you what happens)` }) }, s))));
+      ...["Perception", "Stealth", "Recall Knowledge"].map((s) => h("button", { class: "small", onclick: () => act("chat", { text: `🎲 Everyone, roll ${s}! (DC ${dcForLevel(lvl) + DC_ADJUST[adj] + RARITY_ADJUST[rarity]}; the GM will tell you what happens)` }) }, s))));
 }
 
 // ------------------------------------------------------------------

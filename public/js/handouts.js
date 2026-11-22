@@ -26,7 +26,7 @@ export function renderHandout(ho) {
     case "item":
       card.append(h("div", { class: "row between" }, h("h3", {}, ho.title), m.level !== undefined ? h("span", {}, `Item ${m.level}`) : null),
         m.traits?.length ? h("div", { class: "traits" }, m.traits.map((t) => h("span", {}, t))) : null,
-        m.price !== undefined ? h("p", { class: "muted" }, `Price ${m.price} gp · Bulk ${m.bulk ?? "—"}`) : null,
+        m.price !== undefined ? h("p", { class: "muted" }, `Price ${m.price} gp · Bulk ${m.bulk ?? "-"}`) : null,
         m.html ? richText(m.html) : null, ...text(ho.body));
       break;
     case "creature":
@@ -69,7 +69,7 @@ export function suggestHandouts(state) {
       body: `For crimes against the people${plot.setting ? " of " + plot.setting.split(/[.,]/)[0] : ""}.\n\n${v.description ? "Description: " + v.description.split(".")[0] + "." : ""}\n\nLast seen near ${loc ? loc.name : "the old road"}. Bring information to the magistrate. Do not approach alone.` });
   }
   for (const a of allies.slice(0, 2)) {
-    out.push({ kind: "letter", title: `Letter from ${a.name}`, meta: { to: "To whoever finds this,", from: `— ${a.name}`, seal: a.name[0] },
+    out.push({ kind: "letter", title: `Letter from ${a.name}`, meta: { to: "To whoever finds this,", from: `Signed, ${a.name}`, seal: a.name[0] },
       body: `I don't have long to write. ${plot.hooks ? plot.hooks.split(".")[0] + "." : "Something is very wrong here."}\n\nIf you mean to help, start at ${loc ? loc.name : "the place we spoke of"}${loc2 && loc2 !== loc ? `, and then go on to ${loc2.name}` : ""}. Trust no one who asks after me by name.\n\nBurn this once you've read it.` });
   }
   for (const s of (plot.secrets || []).filter((x) => !x.revealed).slice(0, 4)) {
@@ -89,7 +89,7 @@ function clueFrom(text) {
   const forms = [
     (t) => `A scrap of paper, hastily written: “${t}”`,
     (t) => `Scratched into the wood, barely legible: ${t}`,
-    (t) => `A note in a careful hand: “${t} — tell no one.”`,
+    (t) => `A note in a careful hand: “${t}. Tell no one.”`,
   ];
   return pick(forms)(String(text).replace(/\.$/, ""));
 }

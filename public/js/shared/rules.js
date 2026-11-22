@@ -484,3 +484,60 @@ export function featSlotsFor(char, classData) {
   if (chosen.includes("General Training")) slots.push({ key: "bonusgeneral-1", kind: "general", level: 1, label: "general (General Training)" });
   return slots.sort((a, b) => a.level - b.level);
 }
+
+// Character Wealth (Pathfinder GM Core, Starting at Higher Levels).
+// lump: the lump-sum option (buy any common items up to 1 level below yours).
+// currency: coins that come with the permanent-item allotment instead.
+export const CHARACTER_WEALTH = {
+  1: { lump: 15, currency: 15, items: "" },
+  2: { lump: 30, currency: 20, items: "1st: 1" },
+  3: { lump: 75, currency: 25, items: "2nd: 1, 1st: 2" },
+  4: { lump: 140, currency: 30, items: "3rd: 1, 2nd: 2, 1st: 1" },
+  5: { lump: 270, currency: 50, items: "4th: 1, 3rd: 2, 2nd: 1, 1st: 2" },
+  6: { lump: 450, currency: 80, items: "5th: 1, 4th: 2, 3rd: 1, 2nd: 2" },
+  7: { lump: 720, currency: 125, items: "6th: 1, 5th: 2, 4th: 1, 3rd: 2" },
+  8: { lump: 1100, currency: 180, items: "7th: 1, 6th: 2, 5th: 1, 4th: 2" },
+  9: { lump: 1600, currency: 250, items: "8th: 1, 7th: 2, 6th: 1, 5th: 2" },
+  10: { lump: 2300, currency: 350, items: "9th: 1, 8th: 2, 7th: 1, 6th: 2" },
+  11: { lump: 3200, currency: 500, items: "10th: 1, 9th: 2, 8th: 1, 7th: 2" },
+  12: { lump: 4500, currency: 700, items: "11th: 1, 10th: 2, 9th: 1, 8th: 2" },
+  13: { lump: 6400, currency: 1000, items: "12th: 1, 11th: 2, 10th: 1, 9th: 2" },
+  14: { lump: 9300, currency: 1500, items: "13th: 1, 12th: 2, 11th: 1, 10th: 2" },
+  15: { lump: 13500, currency: 2250, items: "14th: 1, 13th: 2, 12th: 1, 11th: 2" },
+  16: { lump: 20000, currency: 3250, items: "15th: 1, 14th: 2, 13th: 1, 12th: 2" },
+  17: { lump: 30000, currency: 5000, items: "16th: 1, 15th: 2, 14th: 1, 13th: 2" },
+  18: { lump: 45000, currency: 7500, items: "17th: 1, 16th: 2, 15th: 1, 14th: 2" },
+  19: { lump: 69000, currency: 12000, items: "18th: 1, 17th: 2, 16th: 1, 15th: 2" },
+  20: { lump: 112000, currency: 20000, items: "19th: 1, 18th: 2, 17th: 1, 16th: 2" },
+};
+export const startingGold = (level) => CHARACTER_WEALTH[Math.min(20, Math.max(1, level | 0 || 1))].lump;
+
+// Fundamental rune prices (Player Core / GM Core), indexed by grade 1-3
+export const RUNE_PRICES = {
+  weaponPotency: [0, 35, 935, 8935],
+  striking: [0, 65, 1065, 31065],
+  armorPotency: [0, 160, 1060, 20560],
+  resilient: [0, 340, 3440, 49440],
+};
+export const RUNE_LEVELS = {
+  weaponPotency: [0, 2, 10, 16], striking: [0, 4, 12, 19], armorPotency: [0, 5, 11, 18], resilient: [0, 8, 14, 20],
+};
+
+// Total gp value of a character's equipment (base items, runes and gear).
+// lookup: { armor, shields, weapons, gear } arrays with { name, price }.
+export function equipmentValue(e, lookup) {
+  const price = (list, name) => (list || []).find((x) => x.name === name)?.price || 0;
+  let v = 0;
+  if (e.armor) v += price(lookup.armor, e.armor);
+  v += RUNE_PRICES.armorPotency[e.armorRunes?.potency || 0] + RUNE_PRICES.resilient[e.armorRunes?.resilient || 0];
+  if (e.shield) v += price(lookup.shields, e.shield);
+  for (const w of e.weapons || []) v += (w.price ?? price(lookup.weapons, w.name)) + RUNE_PRICES.weaponPotency[w.potency || 0] + RUNE_PRICES.striking[w.striking || 0];
+  for (const it of e.items || []) v += (it.price ?? price(lookup.gear, it.name)) * (it.qty || 1);
+  return Math.round(v * 100) / 100;
+}
+export const fmtGp = (n) => {
+  const v = Math.round((+n || 0) * 100) / 100;
+  if (Number.isInteger(v)) return `${v.toLocaleString()} gp`;
+  const gp = Math.floor(v), sp = Math.round((v - gp) * 10 * 10) / 10;
+  return Number.isInteger(sp) ? `${gp ? gp.toLocaleString() + " gp " : ""}${sp} sp` : `${v.toFixed(2)} gp`;
+};

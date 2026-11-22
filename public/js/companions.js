@@ -1,5 +1,5 @@
 import { load, coreData } from "./data.js";
-import { ATTRS, SKILLS, computeCharacter, featSlotsFor, traditionFor, FULL_CASTERS, spellSlots, freeSkillCount, creatureXP, keyOptions, needsTraditionChoice } from "./shared/rules.js";
+import { CHARACTER_WEALTH, equipmentValue, ATTRS, SKILLS, computeCharacter, featSlotsFor, traditionFor, FULL_CASTERS, spellSlots, freeSkillCount, creatureXP, keyOptions, needsTraditionChoice } from "./shared/rules.js";
 import { blankCharacter } from "./builder.js";
 
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -163,7 +163,14 @@ export async function autoBuild({ level = 1, className = null, name = null } = {
   c.equipment.weapons.forEach((w, i) => { if (i === 0) { w.potency = pot; w.striking = strk; } });
   c.equipment.armorRunes = { potency: level >= 18 ? 3 : level >= 11 ? 2 : level >= 5 ? 1 : 0, resilient: level >= 20 ? 3 : level >= 14 ? 2 : level >= 8 ? 1 : 0 };
   c.equipment.items = [{ name: "Adventurer's Pack", qty: 1 }, { name: "Healing Potion (Minor)", qty: 2 }];
-  c.equipment.gold = level === 1 ? 2 : level * 10;
+  // coins per GM Core's Character Wealth; total wealth = what the kit is worth + those coins
+  const gear = await load("gear");
+  const coins = level === 1 ? 2 : CHARACTER_WEALTH[Math.min(20, level)].currency;
+  const worth = equipmentValue(c.equipment, { ...data, gear });
+  // Within the level's lump sum the character keeps the default wealth (and the change as coins)
+  const lump = CHARACTER_WEALTH[Math.min(20, level)].lump;
+  c.equipment.budget = worth + coins <= lump ? null : worth + coins;
+  c.equipment.gold = Math.round(((c.equipment.budget ?? lump) - worth) * 100) / 100;
   c.name = name || `${pick(NAMES[ancTrait] || NAMES.human)}`;
   c.color = pick(["#3b6ea5", "#4c8c4a", "#8a5a9e", "#b07a2a", "#2f8f8f", "#a33b2b"]);
   return c;

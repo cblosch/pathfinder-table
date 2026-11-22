@@ -1,6 +1,6 @@
 import { h, clear, cap, signed, modal, richText, toast, select } from "./ui.js";
 import { load, coreData } from "./data.js";
-import { ATTRS, ATTR_NAMES, SKILLS, RANKS, AON, computeCharacter, heritageName } from "./shared/rules.js";
+import { ATTRS, ATTR_NAMES, SKILLS, RANKS, AON, computeCharacter, heritageName, fmtGp } from "./shared/rules.js";
 import { act } from "./transport.js";
 import { actionText } from "./builder.js";
 
@@ -126,7 +126,7 @@ export function renderSheet(char, { editable = false, onEdit, rollAs, compact = 
       e.armor ? h("li", {}, `${e.armor}${e.armorRunes?.potency ? ` +${e.armorRunes.potency}` : ""}${e.armorRunes?.resilient ? " resilient" : ""}`) : h("li", {}, "No armor"),
       e.shield ? h("li", {}, e.shield) : null,
       (e.items || []).map((it) => h("li", {}, `${it.qty > 1 ? it.qty + "× " : ""}${it.name}`)),
-      h("li", {}, `${e.gold ?? 0} gp`)),
+      h("li", {}, h("strong", {}, "Coins: "), fmtGp(e.gold ?? 0))),
     h("p", { class: "muted" }, `Bulk limit ${comp.bulkLimit} (encumbered above ${comp.bulkLimit}). Languages: ${comp.languages.map(cap).join(", ")}`));
   if (char.notes) right.append(h("h3", {}, "Notes"), h("p", { class: "pre" }, char.notes));
   cols.append(right);

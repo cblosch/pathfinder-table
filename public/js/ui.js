@@ -29,7 +29,7 @@ export function h(tag, attrs = {}, ...children) {
 
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 export const cap = (s) => String(s || "").replace(/(^|[\s-])\w/g, (m) => m.toUpperCase());
-export const signed = (n) => (n === null || n === undefined ? "—" : n >= 0 ? `+${n}` : `${n}`);
+export const signed = (n) => (n === null || n === undefined ? "-" : n >= 0 ? `+${n}` : `${n}`);
 export const clear = (el) => { while (el.firstChild) el.removeChild(el.firstChild); return el; };
 
 export function toast(msg, kind = "info") {
@@ -149,30 +149,39 @@ export function groupedSelect(groups, value, onChange, { first, ...attrs } = {})
 }
 
 // ---------------------------------------------------------------
-// Light / dark. Until the switch is first used the page follows the device
-// (or claude.ai's own theme setting when hosted there); after that it remembers
-// the choice on this device. The switch only flips between light and dark.
+// Light / dark. Light by default; the switch flips between the two and the
+// choice is remembered. Opening or leaving a game reloads the page, so the
+// choice is kept in localStorage, with sessionStorage and window.name as
+// fallbacks for hosts where storage is blocked.
 // ---------------------------------------------------------------
 const THEME_KEY = "pftable.theme";
-const hostTheme = document.documentElement.getAttribute("data-theme"); // set by claude.ai, if any
 const svg = (body) => `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">${body}</svg>`;
 const THEMES = {
   light: { icon: svg('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'), label: "Theme: light" },
   dark: { icon: svg('<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" fill="currentColor"/>'), label: "Theme: dark" },
 };
-const deviceTheme = () => (hostTheme === "light" || hostTheme === "dark" ? hostTheme : window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-// The stored choice, or (until the switch is first used) the device's / claude.ai's setting
-export function getTheme() {
-  let t = null;
-  try { t = localStorage.getItem(THEME_KEY); } catch {}
-  return t === "light" || t === "dark" ? t : deviceTheme();
+const valid = (t) => (t === "light" || t === "dark" ? t : null);
+function readTheme() {
+  for (const get of [() => localStorage.getItem(THEME_KEY), () => sessionStorage.getItem(THEME_KEY), () => (/(?:^|;)pftheme=(light|dark)/.exec(window.name) || [])[1]]) {
+    try { const t = valid(get()); if (t) return t; } catch {}
+  }
+  return null;
 }
-const chosenTheme = () => { try { const t = localStorage.getItem(THEME_KEY); return t === "light" || t === "dark" ? t : null; } catch { return null; } };
-export function applyTheme(t = chosenTheme()) {
+function saveTheme(t) {
+  try { localStorage.setItem(THEME_KEY, t); } catch {}
+  try { sessionStorage.setItem(THEME_KEY, t); } catch {}
+  try { window.name = `${String(window.name || "").replace(/(?:^|;)pftheme=(light|dark)/g, "")};pftheme=${t}`; } catch {}
+}
+export const getTheme = () => readTheme() || "light";
+let themeWatch = null;
+export function applyTheme(t = getTheme()) {
   const root = document.documentElement;
-  if (t === "light" || t === "dark") root.setAttribute("data-theme", t);
-  else if (hostTheme) root.setAttribute("data-theme", hostTheme);
-  else root.removeAttribute("data-theme");
+  root.setAttribute("data-theme", t);
+  // keep the choice if the host page rewrites the attribute
+  if (!themeWatch) {
+    themeWatch = new MutationObserver(() => { const want = getTheme(); if (root.getAttribute("data-theme") !== want) root.setAttribute("data-theme", want); });
+    themeWatch.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+  }
 }
 export function themeToggle() {
   const btn = h("button", { class: "small theme-btn", type: "button" });
@@ -180,7 +189,7 @@ export function themeToggle() {
   const draw = () => { const next = getTheme() === "dark" ? "light" : "dark"; btn.innerHTML = THEMES[next].icon; btn.title = `Switch to ${next} mode`; btn.setAttribute("aria-label", btn.title); };
   btn.addEventListener("click", () => {
     const next = getTheme() === "dark" ? "light" : "dark";
-    try { localStorage.setItem(THEME_KEY, next); } catch {}
+    saveTheme(next);
     applyTheme(next);
     document.querySelectorAll(".theme-btn").forEach((b) => b !== btn && b.dispatchEvent(new Event("pf-theme")));
     draw();

@@ -45,7 +45,7 @@ export function parsePlotText(text) {
     const m = line.match(/^(title|setting|level|party level|tone|synopsis|summary|hooks?|act|npc|location|place|clue|secret|faction|factions|rewards?)\s*[:\-]\s*(.*)$/i);
     if (!m) { if (line && plot.synopsis !== undefined && !/^#/.test(line)) plot.synopsis += " " + line; continue; }
     const key = m[1].toLowerCase(), val = m[2].trim();
-    const [head, ...rest] = val.split(/\s[-–—]\s|:\s/);
+    const [head, ...rest] = val.split(/\s[-\u2013\u2014]\s|:\s/);
     const desc = rest.join(" - ").trim();
     if (key === "title") plot.title = val;
     else if (key === "setting") plot.setting = val;
@@ -115,7 +115,7 @@ export function plotEditor(state, { onSceneBrief, onMapFor, onReload }) {
     listSection("NPCs", plot.npcs, () => ({ id: uid(), name: "", role: "", ancestry: "", description: "", secret: "", location: "" }), (n) => h("div", {},
       h("div", { class: "grid3" }, text(n, "name", "Name"), text(n, "role", "Role"), text(n, "ancestry", "Ancestry")),
       h("div", { class: "grid2" }, text(n, "description", "Description & personality", 2), text(n, "secret", "Secret (GM only)", 2)),
-      field("Usually found at", select([{ value: "", label: "—" }, ...plot.locations.map((l) => l.name)], n.location || "", (v) => { n.location = v; save(); }))), "+ Add NPC"),
+      field("Usually found at", select([{ value: "", label: "Unknown" }, ...plot.locations.map((l) => l.name)], n.location || "", (v) => { n.location = v; save(); }))), "+ Add NPC"),
     listSection("Locations", plot.locations, () => ({ id: uid(), name: "", type: "dungeon", description: "" }), (l) => h("div", {},
       h("div", { class: "grid2" }, text(l, "name", "Name"), field("Map type", select(Object.entries(MAP_TYPES).map(([value, label]) => ({ value, label })), l.type, (v) => { l.type = v; save(); }))),
       text(l, "description", "Description", 2),
@@ -125,7 +125,7 @@ export function plotEditor(state, { onSceneBrief, onMapFor, onReload }) {
     listSection("Clues & secrets", plot.secrets, () => ({ id: uid(), text: "", revealed: false, location: "" }), (s) => h("div", {},
       text(s, "text", "Clue / secret", 2),
       h("div", { class: "row" },
-        field("Found at", select([{ value: "", label: "—" }, ...plot.locations.map((l) => l.name)], s.location || "", (v) => { s.location = v; save(); })),
+        field("Found at", select([{ value: "", label: "Unknown" }, ...plot.locations.map((l) => l.name)], s.location || "", (v) => { s.location = v; save(); })),
         h("label", { class: "check" }, h("input", { type: "checkbox", checked: s.revealed, onchange: (e) => { s.revealed = e.target.checked; save(); } }), " Revealed"),
         h("button", { class: "small", onclick: async () => { s.revealed = true; await saveNow(); await act("addNote", { text: s.text, public: true, tags: ["clue"] }); toast("Shared with players"); } }, "Reveal to players"))), "+ Add clue"),
     h("section", { class: "bsec" }, text(plot, "factions", "Factions", 2), text(plot, "rewards", "Rewards & treasure notes", 2)),

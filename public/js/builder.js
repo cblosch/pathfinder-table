@@ -4,6 +4,7 @@ import {
   ATTRS, ATTR_NAMES, SKILLS, RANKS, AON, computeCharacter, validateCharacter, freeSkillCount,
   featSlotsFor, traditionFor, FULL_CASTERS, SPONTANEOUS, keyOptions, needsTraditionChoice, ESTIMATED_SLOTS, progressionFor,
   CUSTOM_HERITAGE, heritageName, heritageFeatTraits,
+  CHARACTER_WEALTH, startingGold, RUNE_PRICES, RUNE_LEVELS, equipmentValue, fmtGp,
 } from "./shared/rules.js";
 import { autoBuild } from "./companions.js";
 
@@ -14,7 +15,7 @@ export function bgSummary(b) {
   if (!b) return "";
   const boosts = b.boosts.map((o) => (o.length >= 6 ? "free" : o.map((x) => x.toUpperCase()).join(" or "))).join(", ");
   const trained = [...b.skills.map(cap), ...(b.lore || [])].join(", ");
-  return `Boosts: ${boosts} · Trained: ${trained || "—"}${b.feat ? ` · Feat: ${b.feat}` : ""}`;
+  return `Boosts: ${boosts} · Trained: ${trained || "none"}${b.feat ? ` · Feat: ${b.feat}` : ""}`;
 }
 
 export function blankCharacter(level = 1) {
@@ -23,7 +24,7 @@ export function blankCharacter(level = 1) {
     deity: "", boosts: { alternateAncestry: false, ancestry: [], background: [], free: [] },
     skills: { trained: [], increases: {}, lore: [] }, feats: {}, choices: {},
     spells: { cantrips: [], known: {}, slotOverrides: {} },
-    equipment: { armor: "", armorRunes: { potency: 0, resilient: 0 }, shield: "", weapons: [], items: [], gold: 15 },
+    equipment: { armor: "", armorRunes: { potency: 0, resilient: 0 }, shield: "", weapons: [], items: [], gold: 15, budget: null },
     languages: [], notes: "", color: "#3b6ea5",
   };
 }
@@ -86,11 +87,11 @@ export function mountBuilder(container, initial, { onSave, onCancel, title = "Ch
     sec.append(h("div", { class: "grid2" },
       field("Name", name),
       field("Level", select(Array.from({ length: 20 }, (_, i) => i + 1), c.level, (v) => set("level", +v))),
-      field("Ancestry", groupedSelect(ancestryGroups(data.ancestries), c.ancestry, (v) => { c.heritage = ""; c.boosts.ancestry = []; set("ancestry", v); }, { first: { value: "", label: "— choose —" } })),
-      field("Heritage", select([{ value: "", label: a ? "— choose —" : "pick an ancestry first" }, ...heritages.map((x) => ({ value: x.name, label: x.name + (x.versatile ? " (versatile)" : "") })), ...(a ? [{ value: CUSTOM_HERITAGE, label: "Custom heritage…" }] : [])], c.heritage, (v) => set("heritage", v))),
+      field("Ancestry", groupedSelect(ancestryGroups(data.ancestries), c.ancestry, (v) => { c.heritage = ""; c.boosts.ancestry = []; set("ancestry", v); }, { first: { value: "", label: "Choose…" } })),
+      field("Heritage", select([{ value: "", label: a ? "Choose…" : "pick an ancestry first" }, ...heritages.map((x) => ({ value: x.name, label: x.name + (x.versatile ? " (versatile)" : "") })), ...(a ? [{ value: CUSTOM_HERITAGE, label: "Custom heritage…" }] : [])], c.heritage, (v) => set("heritage", v))),
       field("Background", h("button", { class: `picker-btn ${c.background ? "" : "empty"}`, onclick: () => pickBackground() },
         c.background ? h("span", {}, h("strong", {}, c.background), h("small", { class: "muted" }, bgSummary(background()))) : "Choose a background…")),
-      field("Class", groupedSelect(classGroups(data.classes), c.class, (v) => { c.subclass = ""; c.keyAttribute = ""; c.feats = Object.fromEntries(Object.entries(c.feats).filter(([key]) => !key.startsWith("class"))); c.spells = { cantrips: [], known: {}, slotOverrides: {} }; set("class", v); }, { first: { value: "", label: "— choose —" } })),
+      field("Class", groupedSelect(classGroups(data.classes), c.class, (v) => { c.subclass = ""; c.keyAttribute = ""; c.feats = Object.fromEntries(Object.entries(c.feats).filter(([key]) => !key.startsWith("class"))); c.spells = { cantrips: [], known: {}, slotOverrides: {} }; set("class", v); }, { first: { value: "", label: "Choose…" } })),
     ));
     if (c.heritage === CUSTOM_HERITAGE) {
       c.customHeritage ||= { ancestry: "", vision: false, name: "", desc: "" };
@@ -102,20 +103,18 @@ export function mountBuilder(container, initial, { onSave, onCancel, title = "Ch
         h("h4", {}, "Custom heritage"),
         h("p", { class: "hint" }, "You're descended from a second ancestry. You can take its ancestry feats (as with Adopted Ancestry), and if your table agrees, gain its special vision."),
         h("div", { class: "grid2" },
-          field("Second ancestry", groupedSelect(ancestryGroups(others), ch.ancestry, (v) => { ch.ancestry = v; render(); }, { first: { value: "", label: "— choose —" }, id: "ch-ancestry" })),
+          field("Second ancestry", groupedSelect(ancestryGroups(others), ch.ancestry, (v) => { ch.ancestry = v; render(); }, { first: { value: "", label: "Choose…" }, id: "ch-ancestry" })),
           field("Heritage name (optional)", h("input", { id: "ch-name", value: ch.name, placeholder: ch.ancestry ? `${ch.ancestry}-blooded` : "e.g. Dwarf-blooded", oninput: (e) => { ch.name = e.target.value; summary(); } }))),
         other ? h("label", { class: "check" }, h("input", { type: "checkbox", id: "ch-vision", checked: ch.vision, disabled: (other.vision || "normal") === "normal" ? "disabled" : null, onchange: (e) => { ch.vision = e.target.checked; render(); } }),
           (other.vision || "normal") === "normal" ? ` ${other.name} has no special vision to inherit` : ` Gain ${other.name} ${vis(other.vision)} (ask your GM)`) : null,
         field("Description (optional)", h("textarea", { id: "ch-desc", rows: 2, value: ch.desc, placeholder: "How the bloodline shows", oninput: (e) => { ch.desc = e.target.value; } }))));
     }
     if (k?.subclasses?.length) {
-      sec.append(field(cap(k.subclassLabel), select([{ value: "", label: "— choose —" }, ...k.subclasses.map((s) => s.name)], c.subclass, (v) => set("subclass", v))));
+      sec.append(field(cap(k.subclassLabel), select([{ value: "", label: "Choose…" }, ...k.subclasses.map((s) => s.name)], c.subclass, (v) => set("subclass", v))));
     }
-    if (k && keyOptions(k).length > 1) {
-      sec.append(field("Key attribute", select([{ value: "", label: "— choose —" }, ...keyOptions(k).map((x) => ({ value: x, label: ATTR_NAMES[x] }))], c.keyAttribute, (v) => set("keyAttribute", v))));
-    }
+
     if (k && needsTraditionChoice(c, k)) {
-      sec.append(field("Spellcasting tradition", select([{ value: "", label: "— choose —" }, ...["arcane", "divine", "occult", "primal"].map((t) => ({ value: t, label: cap(t) }))], c.choices.tradition || "", (v) => set("choices.tradition", v)),
+      sec.append(field("Spellcasting tradition", select([{ value: "", label: "Choose…" }, ...["arcane", "divine", "occult", "primal"].map((t) => ({ value: t, label: cap(t) }))], c.choices.tradition || "", (v) => set("choices.tradition", v)),
         `Your ${k.subclassLabel} lets you choose; check its text below.`));
     }
     if (c.class === "Cleric" || c.class === "Champion") {
@@ -123,10 +122,10 @@ export function mountBuilder(container, initial, { onSave, onCancel, title = "Ch
     }
     if (c.class === "Fighter") {
       const groups = [...new Set(data.weapons.map((w) => w.group).filter(Boolean))].sort();
-      sec.append(field("Fighter Weapon Mastery group (level 5+)", select([{ value: "", label: "— choose —" }, ...groups.map((g) => ({ value: g, label: cap(g) }))], c.choices.fighterGroup, (v) => set("choices.fighterGroup", v))));
+      sec.append(field("Fighter Weapon Mastery group (level 5+)", select([{ value: "", label: "Choose…" }, ...groups.map((g) => ({ value: g, label: cap(g) }))], c.choices.fighterGroup, (v) => set("choices.fighterGroup", v))));
     }
     if (c.class === "Monk") {
-      const saves = [{ value: "", label: "—" }, { value: "fortitude", label: "Fortitude" }, { value: "reflex", label: "Reflex" }, { value: "will", label: "Will" }];
+      const saves = [{ value: "", label: "None" }, { value: "fortitude", label: "Fortitude" }, { value: "reflex", label: "Reflex" }, { value: "will", label: "Will" }];
       sec.append(h("div", { class: "grid3" },
         field("Path to Perfection (7)", select(saves, c.choices.path1, (v) => set("choices.path1", v))),
         field("Second Path (11)", select(saves, c.choices.path2, (v) => set("choices.path2", v))),
@@ -138,7 +137,7 @@ export function mountBuilder(container, initial, { onSave, onCancel, title = "Ch
     const her = heritages.find((x) => x.name === c.heritage);
     if (her) info.append(infoCard(her.name, "Heritage", her.desc));
     const bg = background();
-    if (bg) info.append(infoCard(bg.name, `Trained: ${[...bg.skills.map(cap), ...bg.lore].join(", ")} · Feat: ${bg.feat || "—"}`, bg.desc));
+    if (bg) info.append(infoCard(bg.name, `Trained: ${[...bg.skills.map(cap), ...bg.lore].join(", ")} · Feat: ${bg.feat || "none"}`, bg.desc));
     if (k) info.append(infoCard(k.name, `${k.hp} HP/level · Key: ${keyOptions(k).map((x) => ATTR_NAMES[x]).join(" or ")}${progressionFor(k)?.extracted ? " · proficiency increases read from the class text; check your saves and weapons against AoN" : ""}`, k.desc));
     const sub = k?.subclasses?.find((s) => s.name === c.subclass);
     if (sub) info.append(infoCard(sub.name, cap(k.subclassLabel), sub.desc));
@@ -149,7 +148,7 @@ export function mountBuilder(container, initial, { onSave, onCancel, title = "Ch
   function deityPicker() {
     const wrap = h("div", { class: "grid2" });
     load("deities").then((deities) => {
-      const sel = select([{ value: "", label: "— choose deity —" }, ...deities.map((d) => ({ value: d.name, label: d.name }))], c.deity, (v) => {
+      const sel = select([{ value: "", label: "Choose a deity…" }, ...deities.map((d) => ({ value: d.name, label: d.name }))], c.deity, (v) => {
         const d = deities.find((x) => x.name === v);
         c.deity = v;
         c.deitySkill = d?.skill?.[0] || "";
@@ -171,11 +170,22 @@ export function mountBuilder(container, initial, { onSave, onCancel, title = "Ch
   }
 
   function pickBackground() {
-    openPicker("Choose a background", data.backgrounds, {
-      meta: (b) => bgSummary(b),
+    // Backgrounds whose restricted boost includes the class's key attribute come first
+    const k = klass();
+    const keys = k ? (keyOptions(k).length === 1 ? keyOptions(k) : c.keyAttribute ? [c.keyAttribute] : keyOptions(k)) : [];
+    const fits = (bg) => keys.length > 0 && bg.boosts.some((o) => o.length < 6 && o.some((x) => keys.includes(x)));
+    const sorted = [...data.backgrounds].sort((x, y) => (fits(y) - fits(x)) || x.name.localeCompare(y.name));
+    openPicker(keys.length ? `Choose a background (best for ${k.name} listed first)` : "Choose a background", sorted, {
+      meta: (b) => `${fits(b) ? `★ boosts ${keys.filter((x) => b.boosts.some((o) => o.length < 6 && o.includes(x))).map((x) => x.toUpperCase()).join("/")} · ` : ""}${bgSummary(b)}`,
       search: (b) => bgSummary(b),
       onPick: (b) => { c.boosts.background = []; set("background", b.name); },
     });
+  }
+
+  // A boost (or flaw) that isn't a choice, shown in the same row format as the choices
+  function fixedRow(label, attr, flaw = false) {
+    return h("div", { class: "boost-row" }, h("span", { class: "lbl" }, label),
+      ...ATTRS.map((at) => h("button", { class: `chip ${at === attr ? (flaw ? "on flaw" : "on") : ""}`, disabled: "disabled", tabindex: -1 }, at.toUpperCase())));
   }
 
   function boostPicker(label, opts, current, onPick, taken = []) {
@@ -198,14 +208,14 @@ export function mountBuilder(container, initial, { onSave, onCancel, title = "Ch
       if (b.alternateAncestry) {
         for (let i = 0; i < 2; i++) sec.append(boostPicker(`${a.name} free boost`, ATTRS, b.ancestry[i], (v) => { b.ancestry[i] = v; render(); }, b.ancestry.filter((_, j) => j !== i)));
       } else {
-        const fixed = a.boosts.map((o) => (o.length === 1 ? o[0] : null)).filter(Boolean);
-        sec.append(h("p", {}, `${a.name}: +1 ${fixed.map((x) => x.toUpperCase()).join(", ") || "—"}`, a.flaws.some((f) => f.length === 1) ? `, flaw −1 ${a.flaws.filter((f) => f.length === 1).map((f) => f[0].toUpperCase()).join(", ")}` : ""));
         a.boosts.forEach((opts, i) => {
-          if (opts.length > 1) {
+          if (opts.length === 1) sec.append(fixedRow(`${a.name} boost`, opts[0]));
+          else if (opts.length > 1) {
             const others = a.boosts.map((o, j) => (j === i ? null : o.length === 1 ? o[0] : b.ancestry[j])).filter(Boolean);
             sec.append(boostPicker(`${a.name} free boost`, opts, b.ancestry[i], (v) => { b.ancestry[i] = v; render(); }, others));
           }
         });
+        a.flaws.filter((f) => f.length === 1).forEach((f) => sec.append(fixedRow(`${a.name} flaw (−1)`, f[0], true)));
       }
     }
     if (bg) {
@@ -214,7 +224,10 @@ export function mountBuilder(container, initial, { onSave, onCancel, title = "Ch
         sec.append(boostPicker(`${bg.name} boost ${i + 1}${opts.length < 6 ? "" : " (free)"}`, opts, opts.length === 1 ? opts[0] : b.background[i], (v) => { b.background[i] = v; render(); }, others));
       });
     }
-    if (k) sec.append(h("p", {}, `${k.name} key attribute: +1 ${(keyOptions(k).length === 1 ? keyOptions(k)[0] : c.keyAttribute || "?").toUpperCase()}`));
+    if (k) {
+      const opts = keyOptions(k);
+      sec.append(opts.length === 1 ? fixedRow(`${k.name} key attribute`, opts[0]) : boostPicker(`${k.name} key attribute`, opts, c.keyAttribute, (v) => set("keyAttribute", v)));
+    }
     const setPick = (key, label) => {
       b[key] ||= [];
       sec.append(h("div", { class: "boost-row" }, h("span", { class: "lbl" }, label),
@@ -236,23 +249,28 @@ export function mountBuilder(container, initial, { onSave, onCancel, title = "Ch
     const fixed = new Set([...(k.trainedSkills || []), ...(bg?.skills || []), ...(c.class === "Cleric" && c.deitySkill ? [c.deitySkill] : [])]);
     const want = freeSkillCount(c, data);
     c.skills.trained = c.skills.trained.filter((s) => !fixed.has(s));
-    sec.append(h("p", {}, `Automatically trained: ${[...fixed].map(cap).join(", ") || "none"}${bg?.lore?.length ? ", " + bg.lore.join(", ") : ""}. Pick ${want} more (class ${k.additionalSkills} + Intelligence). Picked ${c.skills.trained.length}.`));
-    sec.append(h("div", { class: "chips" }, Object.keys(SKILLS).map((s) => {
-      const on = c.skills.trained.includes(s);
-      return h("button", { class: `chip ${on || fixed.has(s) ? "on" : ""}`, disabled: fixed.has(s) || (!on && c.skills.trained.length >= want) ? "disabled" : null,
-        onclick: () => { c.skills.trained = on ? c.skills.trained.filter((x) => x !== s) : [...c.skills.trained, s]; render(); } }, cap(s));
-    })));
+    sec.append(h("div", { class: "boost-row" }, h("span", { class: "lbl" }, "Trained by class & background"),
+      [...fixed].map((s) => h("button", { class: "chip on", disabled: "disabled", tabindex: -1 }, cap(s))),
+      (bg?.lore || []).map((l) => h("button", { class: "chip on", disabled: "disabled", tabindex: -1 }, l)),
+      !fixed.size && !bg?.lore?.length ? h("span", { class: "muted" }, "none") : null));
+    sec.append(h("div", { class: "boost-row" }, h("span", { class: "lbl" }, `Choose ${want} (${c.skills.trained.length} of ${want})`),
+      Object.keys(SKILLS).filter((s) => !fixed.has(s)).map((s) => {
+        const on = c.skills.trained.includes(s);
+        return h("button", { class: `chip ${on ? "on" : ""}`, disabled: !on && c.skills.trained.length >= want ? "disabled" : null,
+          onclick: () => { c.skills.trained = on ? c.skills.trained.filter((x) => x !== s) : [...c.skills.trained, s]; render(); } }, cap(s));
+      })));
+    sec.append(h("p", { class: "hint" }, `Choices: ${k.additionalSkills} from your class + your Intelligence modifier${Object.values(c.feats || {}).includes("Natural Skill") ? " + 2 from Natural Skill" : ""}.`));
     const incLevels = k.skillIncreaseLevels.filter((l) => l <= c.level);
     if (incLevels.length) {
       sec.append(h("h4", {}, "Skill increases"), h("p", { class: "hint" }, "Expert from level 2, master from level 7, legendary from level 15. Each increase raises one skill by one rank."));
       const grid = h("div", { class: "grid3" });
       for (const lvl of incLevels) {
-        grid.append(field(`Level ${lvl}`, select([{ value: "", label: "—" }, ...Object.keys(SKILLS).map((s) => ({ value: s, label: cap(s) }))], c.skills.increases[lvl], (v) => { c.skills.increases[lvl] = v; render(); })));
+        grid.append(field(`Level ${lvl}`, select([{ value: "", label: "None" }, ...Object.keys(SKILLS).map((s) => ({ value: s, label: cap(s) }))], c.skills.increases[lvl], (v) => { c.skills.increases[lvl] = v; render(); })));
       }
       sec.append(grid);
     }
     if (c.heritage === "Skilled Human") {
-      sec.append(field(`${heritageName(c)} skill (expert at 5th level)`, select([{ value: "", label: "— choose —" }, ...Object.keys(SKILLS).map((s) => ({ value: s, label: cap(s) }))], c.skills.heritage || "", (v) => set("skills.heritage", v))));
+      sec.append(field(`${heritageName(c)} skill (expert at 5th level)`, select([{ value: "", label: "Choose…" }, ...Object.keys(SKILLS).map((s) => ({ value: s, label: cap(s) }))], c.skills.heritage || "", (v) => set("skills.heritage", v))));
     }
     const lore = h("input", { value: (c.skills.lore || []).join(", "), placeholder: "e.g. Tavern Lore", onchange: (e) => set("skills.lore", e.target.value.split(",").map((x) => x.trim()).filter(Boolean)) });
     sec.append(field("Extra Lore skills (comma separated, e.g. from feats)", lore));
@@ -342,42 +360,145 @@ export function mountBuilder(container, initial, { onSave, onCancel, title = "Ch
     });
   }
 
+  // Money: total wealth (budget) is the level's starting wealth unless edited;
+  // coins = wealth − what the equipment is worth. Shop buys/sells in a game keep that true.
+  let gearData = null;
+  load("gear").then((g) => { gearData = g; if (c.equipment?.items?.length) render(); });
+  const wealth = () => (c.equipment.budget ?? startingGold(c.level));
+  const equipValue = () => equipmentValue(c.equipment, { ...data, gear: gearData || [] });
+  const syncGold = () => { c.equipment.gold = Math.round((wealth() - equipValue()) * 100) / 100; return c.equipment.gold; };
+
   function equipment() {
     const comp = computeCharacter(c, data);
     const e = c.equipment;
-    const sec = h("section", { class: "bsec" }, h("h3", {}, `${FULL_CASTERS.includes(c.class) ? 6 : 5}. Equipment`),
-      h("p", { class: "hint" }, "A 1st-level character starts with 15 gp to spend (Player Core). Higher-level characters: see Character Wealth in Player Core / GM Core."));
+    e.items ||= [];
+    const coins = syncGold();
+    const maxItemLevel = Math.max(1, (c.level || 1) - 1);
+    const sec = h("section", { class: "bsec" }, h("h3", {}, `${FULL_CASTERS.includes(c.class) ? 6 : 5}. Equipment`));
     const profMark = (cat) => (comp.prof[cat] > 0 ? "" : " (untrained)");
+    const gp = (n) => (n ? ` · ${fmtGp(n)}` : "");
+    const afford = (price) => price <= coins + 1e-9;
+
+    // purse
+    const auto = e.budget == null;
+    const budgetIn = h("input", { type: "number", min: 0, value: wealth(), style: { width: "8em" },
+      onchange: (ev) => { const v = +ev.target.value; set("equipment.budget", Number.isFinite(v) && v >= 0 ? v : null); } });
+    sec.append(h("div", { class: `purse ${coins < 0 ? "over" : ""}` },
+      h("div", { class: "purse-row" },
+        h("label", { class: "lbl" }, "Starting wealth"), budgetIn,
+        auto ? h("small", { class: "muted" }, `level ${c.level} default`) : h("button", { class: "small", onclick: () => set("equipment.budget", null) }, `Reset to level ${c.level} default (${fmtGp(startingGold(c.level))})`)),
+      h("div", { class: "purse-row" },
+        h("span", { class: "lbl" }, "Spent on equipment"), h("span", {}, fmtGp(equipValue())),
+        h("span", { class: "lbl" }, "Coins left"), h("strong", { class: coins < 0 ? "warn" : "" }, fmtGp(coins))),
+      h("p", { class: "hint" }, c.level > 1
+        ? `GM Core's lump-sum option for level ${c.level}: ${fmtGp(startingGold(c.level))}, spent on common items up to level ${maxItemLevel}. (The alternative is ${CHARACTER_WEALTH[Math.min(20, c.level)].items} permanent items plus ${fmtGp(CHARACTER_WEALTH[Math.min(20, c.level)].currency)}; enter a custom wealth if your GM uses it.)`
+        : "A 1st-level character starts with 15 gp to spend."),
+      coins < 0 ? h("p", { class: "warn" }, `Over budget by ${fmtGp(-coins)}. Remove something or raise the starting wealth.`) : null));
+
+    // Armor that fits your stats: trained in it, its Dex cap uses your whole Dex
+    // modifier, and you meet its Strength requirement. Best total AC first.
+    const dex = comp.mods.dex, str = comp.mods.str;
+    const armorAC = (a) => a.ac + Math.min(dex, a.dexCap ?? 99);
+    const trained = (a) => comp.prof[a.category] > 0;
+    const fits = (a) => trained(a) && (a.dexCap ?? 99) >= dex && str >= (a.strength || 0);
+    const unarmoredAC = dex;
+    function armorSelect() {
+      const label = (a) => `${a.name}: ${cap(a.category)}, +${armorAC(a)} AC with your Dex${a.strength && str < a.strength ? `, needs Str +${a.strength}` : ""}${gp(a.price)}`;
+      const byAC = (x, y) => armorAC(y) - armorAC(x) || x.price - y.price;
+      const pool = data.armor.filter((a) => (a.rarity || "common") === "common" || a.name === e.armor);
+      const best = pool.filter(fits).filter((a) => armorAC(a) >= unarmoredAC).sort(byAC);
+      const groups = [
+        { label: "Best fit for your stats", options: best.map((a) => ({ value: a.name, label: label(a) })) },
+        { label: "Other armor you're trained in", options: pool.filter((a) => trained(a) && !best.includes(a)).sort(byAC).map((a) => ({ value: a.name, label: label(a) })) },
+        { label: "Untrained (penalties)", options: pool.filter((a) => !trained(a)).sort(byAC).map((a) => ({ value: a.name, label: `${label(a)} (untrained)` })) },
+      ];
+      return groupedSelect(groups, e.armor, (v) => set("equipment.armor", v), { first: { value: "", label: `None (unarmored, +${unarmoredAC} AC from Dex)` } });
+    }
+    function armorHint() {
+      const a = data.armor.find((x) => x.name === e.armor);
+      if (!a) return `Dex ${dex >= 0 ? "+" : ""}${dex}, Str ${str >= 0 ? "+" : ""}${str}. Armor listed first uses your full Dex and needs no more Strength than you have.`;
+      if (!trained(a)) return "You aren't trained in this armor, so you don't add proficiency to AC.";
+      if ((a.dexCap ?? 99) < dex) return `Its Dex cap (+${a.dexCap}) wastes ${dex - a.dexCap} point${dex - a.dexCap > 1 ? "s" : ""} of your Dex.`;
+      if (str < (a.strength || 0)) return `Below its Strength +${a.strength}, so its check penalty (${a.checkPenalty})${a.speedPenalty ? ` and full Speed penalty (${a.speedPenalty} ft)` : ""} apply.`;
+      return "Fits your stats: full Dex bonus and no Strength penalty.";
+    }
+
+    const runeSel = (kind, labels, val, onPick) => select([0, 1, 2, 3].map((n) => ({ value: n, label: `${labels[n]}${gp(RUNE_PRICES[kind][n])}${n && RUNE_LEVELS[kind][n] > c.level ? ` (item ${RUNE_LEVELS[kind][n]})` : ""}` })), val, onPick);
     sec.append(h("div", { class: "grid3" },
-      field("Armor", select([{ value: "", label: "None (unarmored)" }, ...data.armor.map((a) => ({ value: a.name, label: `${a.name} — ${cap(a.category)}, +${a.ac} AC, ${a.price} gp${profMark(a.category)}` }))], e.armor, (v) => set("equipment.armor", v))),
-      field("Armor potency", select([0, 1, 2, 3].map((n) => ({ value: n, label: n ? `+${n}` : "none" })), e.armorRunes.potency, (v) => set("equipment.armorRunes.potency", +v))),
-      field("Resilient", select([0, 1, 2, 3].map((n) => ({ value: n, label: ["none", "resilient", "greater", "major"][n] })), e.armorRunes.resilient, (v) => set("equipment.armorRunes.resilient", +v))),
-      field("Shield", select([{ value: "", label: "None" }, ...data.shields.map((s) => ({ value: s.name, label: `${s.name} (+${s.ac} AC raised, Hardness ${s.hardness})` }))], e.shield, (v) => set("equipment.shield", v))),
-      field("Gold (gp)", h("input", { type: "number", value: e.gold, onchange: (ev) => set("equipment.gold", +ev.target.value, false) }))));
+      (() => { const f = field("Armor", armorSelect(), armorHint()); f.classList.add("span-all"); return f; })(),
+      field("Armor potency", runeSel("armorPotency", ["none", "+1", "+2", "+3"], e.armorRunes.potency, (v) => set("equipment.armorRunes.potency", +v))),
+      field("Resilient", runeSel("resilient", ["none", "resilient", "greater", "major"], e.armorRunes.resilient, (v) => set("equipment.armorRunes.resilient", +v))),
+      field("Shield", select([{ value: "", label: "None" }, ...data.shields.map((s) => ({ value: s.name, label: `${s.name} (+${s.ac} AC raised, Hardness ${s.hardness})${gp(s.price)}` }))], e.shield, (v) => set("equipment.shield", v)))));
     const wlist = h("div", { class: "weapons" });
     e.weapons.forEach((w, i) => {
       const wd = data.weapons.find((x) => x.name === w.name);
       wlist.append(h("div", { class: "weapon-row" },
-        h("strong", {}, w.name), h("small", { class: "muted" }, wd ? `${cap(wd.category)}${profMark(wd.category)} · ${wd.damage} ${wd.damageType} · ${wd.traits.join(", ")}` : ""),
-        select([0, 1, 2, 3].map((n) => ({ value: n, label: n ? `+${n}` : "no potency" })), w.potency || 0, (v) => { w.potency = +v; render(); }),
-        select([0, 1, 2, 3].map((n) => ({ value: n, label: ["no striking", "striking", "greater striking", "major striking"][n] })), w.striking || 0, (v) => { w.striking = +v; render(); }),
-        h("button", { class: "icon", onclick: () => { e.weapons.splice(i, 1); render(); } }, "✕")));
+        h("strong", {}, w.name), h("small", { class: "muted" }, wd ? `${cap(wd.category)}${profMark(wd.category)} · ${wd.damage} ${wd.damageType} · ${wd.traits.join(", ")}${gp(wd.price)}` : ""),
+        runeSel("weaponPotency", ["no potency", "+1", "+2", "+3"], w.potency || 0, (v) => { w.potency = +v; render(); }),
+        runeSel("striking", ["no striking", "striking", "greater striking", "major striking"], w.striking || 0, (v) => { w.striking = +v; render(); }),
+        h("button", { class: "icon", title: "Remove (refunds the price)", onclick: () => { e.weapons.splice(i, 1); render(); } }, "✕")));
     });
     sec.append(h("h4", {}, "Weapons"), wlist,
-      h("button", { onclick: () => openPicker("Add a weapon", data.weapons, {
-        meta: (w) => `${cap(w.category)}${profMark(w.category)} · ${w.damage} ${w.damageType}${w.range ? " · range " + w.range + " ft" : ""} · ${w.price} gp · ${w.traits.join(", ")}`,
+      h("button", { onclick: () => openPicker("Buy a weapon", data.weapons, {
+        meta: (w) => `${cap(w.category)}${profMark(w.category)} · ${w.damage} ${w.damageType}${w.range ? " · range " + w.range + " ft" : ""} · ${fmtGp(w.price)}${afford(w.price) ? "" : " · can't afford"} · ${w.traits.join(", ")}`,
         onPick: (w) => { e.weapons.push({ name: w.name, potency: 0, striking: 0 }); render(); },
-      }) }, "+ Add weapon"));
-    const ilist = h("div", { class: "chips" }, (e.items || []).map((it, i) => h("span", { class: "chip on" }, `${it.qty > 1 ? it.qty + "× " : ""}${it.name}`, " ", h("button", { class: "icon", onclick: () => { e.items.splice(i, 1); render(); } }, "✕"))));
+      }) }, "+ Buy weapon"));
+
+    // gear, bought from the shop
+    const ilist = h("div", { class: "gear-list" }, e.items.map((it, i) => {
+      const price = it.price ?? gearData?.find((g) => g.name === it.name)?.price ?? 0;
+      return h("div", { class: "gear-row" },
+        h("span", {}, it.name), h("small", { class: "muted" }, price ? `${fmtGp(price)} each` : ""),
+        h("span", { class: "qty" },
+          h("button", { class: "icon", title: "One fewer", onclick: () => { if ((it.qty || 1) > 1) it.qty--; else e.items.splice(i, 1); render(); } }, "−"),
+          h("span", {}, it.qty || 1),
+          h("button", { class: "icon", title: "One more", disabled: afford(price) ? null : "disabled", onclick: () => { it.qty = (it.qty || 1) + 1; render(); } }, "+")));
+    }));
+    if (!e.items.length) ilist.append(h("p", { class: "muted" }, "Nothing yet."));
     sec.append(h("h4", {}, "Gear"), ilist,
-      h("button", { onclick: async () => {
-        const gear = await load("gear");
-        openPicker("Add gear", gear.filter((g) => g.level <= c.level + 2), {
-          meta: (g) => `Level ${g.level} · ${g.type} · ${g.price} gp · bulk ${g.bulk}`,
-          onPick: (g) => { (e.items ||= []).push({ name: g.name, qty: 1 }); render(); },
-        });
-      } }, "+ Add gear"));
+      h("div", { class: "row" },
+        h("button", { class: "primary", onclick: () => openShop() }, "🛒 Shop for gear"),
+        h("small", { class: "muted" }, `Common items up to level ${maxItemLevel}; prices are deducted from your coins.`)));
     return sec;
+
+    async function openShop() {
+      const gear = await load("gear");
+      gearData = gear;
+      const stock = gear.filter((g) => g.level <= maxItemLevel && g.price > 0 && !/^(Weapon Potency|Armor Potency|Striking|Resilient)\b/.test(g.name));
+      const TYPES = [["all", "Everything"], ["equipment", "Adventuring gear"], ["consumable", "Consumables"], ["ammo", "Ammunition"], ["weapon (magic)", "Magic weapons"], ["armor (magic)", "Magic armor"], ["shield (magic)", "Magic shields"], ["container", "Containers"]];
+      let type = "all";
+      const q = h("input", { placeholder: "Search…" });
+      const purse = h("strong", {});
+      const list = h("div", { class: "picker-list" });
+      const draw = () => {
+        const have = syncGold();
+        purse.textContent = fmtGp(have);
+        clear(list);
+        const term = q.value.toLowerCase().trim();
+        const shown = stock.filter((g) => (type === "all" || g.type === type) && (g.rarity || "common") === "common" && (!term || g.name.toLowerCase().includes(term) || g.traits.some((t) => t.includes(term))));
+        for (const g of shown.slice(0, 200)) {
+          const desc = richText(g.desc || ""); desc.classList.add("collapsed");
+          const ok = g.price <= have + 1e-9;
+          list.append(h("div", { class: "pick" },
+            h("div", { class: "row between" },
+              h("button", { class: "link strong", onclick: () => desc.classList.toggle("collapsed") }, g.name),
+              h("span", { class: "row" }, h("span", { class: ok ? "" : "warn" }, fmtGp(g.price)),
+                h("button", { class: "primary small", disabled: ok ? null : "disabled", onclick: () => {
+                  const have = e.items.find((x) => x.name === g.name);
+                  if (have) have.qty = (have.qty || 1) + 1; else e.items.push({ name: g.name, qty: 1, price: g.price });
+                  toast(`Bought ${g.name}`); draw(); render();
+                } }, ok ? "Buy" : "Can't afford"))),
+            h("small", { class: "muted" }, `Item ${g.level} · ${g.type} · bulk ${g.bulk || "none"}${g.traits.length ? " · " + g.traits.join(", ") : ""}`), desc));
+        }
+        if (!shown.length) list.append(h("p", { class: "muted" }, "Nothing matches."));
+        if (shown.length > 200) list.append(h("p", { class: "muted" }, `${shown.length - 200} more. Refine your search.`));
+      };
+      q.addEventListener("input", draw);
+      modal("Shop", h("div", {},
+        h("div", { class: "row between" }, h("span", {}, "Coins: ", purse), h("small", { class: "muted" }, `Common items, level ${maxItemLevel} and below`)),
+        h("div", { class: "row" }, q, select(TYPES.map(([value, label]) => ({ value, label })), type, (v) => { type = v; draw(); })), list), { wide: true });
+      draw();
+    }
   }
 
   function extras() {
@@ -466,10 +587,10 @@ export function openPicker(title, items, { meta, warn, taken, onPick, search }) 
           h("button", { class: "link strong", onclick: () => { desc.classList.toggle("collapsed"); } }, it.name, it.rarity && it.rarity !== "common" ? h("span", { class: `rar ${it.rarity}` }, it.rarity) : null),
           h("span", { class: "row" }, aonLink(it.name), h("button", { class: "primary small", disabled: isTaken ? "disabled" : null, onclick: () => { onPick(it); m.close(); } }, isTaken ? "Taken" : "Choose"))),
         h("small", { class: "muted" }, meta ? meta(it) : ""),
-        it.prereq?.length ? h("small", { class: w ? "warn" : "muted" }, `Prerequisites: ${it.prereq.join("; ")}${w ? " — " + w : ""}`) : null,
+        it.prereq?.length ? h("small", { class: w ? "warn" : "muted" }, `Prerequisites: ${it.prereq.join("; ")}${w ? "; " + w : ""}`) : null,
         desc));
     }
-    if (shown.length > 250) list.append(h("p", { class: "muted" }, `${shown.length - 250} more — refine your search.`));
+    if (shown.length > 250) list.append(h("p", { class: "muted" }, `${shown.length - 250} more. Refine your search.`));
   };
   q.addEventListener("input", draw);
   const rar = select([{ value: "common", label: "Common only" }, { value: "all", label: "Include uncommon/rare" }], rarity, (v) => { rarity = v; draw(); });
