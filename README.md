@@ -7,6 +7,7 @@ A web app for running **Pathfinder Second Edition (Remaster)** games with up to 
 Requires Node.js 18 or newer. No build step.
 
 ```bash
+git clone https://github.com/cblosch/pathfinder-table.git
 cd pathfinder-table
 npm install        # only needed for the optional AI assistant
 npm start          # http://localhost:3000
@@ -30,6 +31,7 @@ It uses `claude-opus-5-5` by default (`PF_TABLE_MODEL` overrides it). Players ne
 
 ## Hosted version (no server)
 
+A hosted copy runs as a claude.ai artifact. 
 `artifact/page.html` plus `public/` is published as a claude.ai artifact, so the app runs from a link with nothing to install. In that version:
 
 - Everyone signs in to claude.ai and opens the same link. Players need edit access to the artifact (Share menu) so their moves can be saved.
