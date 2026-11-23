@@ -62,7 +62,7 @@ test("players can only move their own token onto revealed, open squares", () => 
   applyAction(g, a1, "token", { op: "move", id: mine.id, x: 1, y: 0 });
   assert.equal(mine.x, 1);
   assert.throws(() => applyAction(g, a1, "token", { op: "move", id: theirs.id, x: 1, y: 0 }), /own token/);
-  assert.throws(() => applyAction(g, a1, "token", { op: "move", id: mine.id, x: 2, y: 0 }), /can't move/);
+  assert.throws(() => applyAction(g, a1, "token", { op: "move", id: mine.id, x: 2, y: 0 }), /solid/);
 });
 
 test("handouts reach only their recipients; secret rolls stay secret", () => {

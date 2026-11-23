@@ -22,10 +22,12 @@ export const FEATURES = {
   camp: { label: "camp", words: /\b(camp|campsite|campfire|bonfire|tents?|bandit camp|encampment)\b/ },
   road: { label: "road", words: /\b(road|path|trail|highway|track)\b/ },
   noRoad: { label: "no road", words: /\b(no road|trackless|pathless|wild)\b/ },
-  ramshackle: { label: "ramshackle buildings", words: /\b(ramshackle|shanty|shanties|shacks?|hovels?|dilapidated|rickety|crumbling)\b/ },
+  ramshackle: { label: "ramshackle buildings", words: /\b(ramshackle|shanty|shanties|shacks|hovels|dilapidated|rickety|crumbling)\b/ },
   stairs: { label: "stairs", words: /\b(stairs?|staircase|steps|ladders?)\b/ },
   furniture: { label: "furniture", words: /\b(tables?|benches|desks?|shelves|bookshelves|library|barracks|beds|crates|barrels)\b/ },
   swamp: { label: "swamp", words: /\b(swamp|marsh|bog|fen|mire|wetland)\b/ },
+  oasis: { label: "oasis", words: /\boasis\b/ },
+  building: { label: "a lone building", words: /\b(a|an|one|single|lone|small|old|abandoned|ramshackle|rickety|tiny) (\w+ )?(shack|hut|cabin|cottage|house|shed|hovel|lodge|outpost|watchtower|tower|chapel|shrine|mill|farmhouse|barn|tent)\b/ },
   sand: { label: "sand", words: /\b(desert|beach|dunes?|sandy|shore|coast)\b/ },
   denseTrees: { label: "dense trees", words: /\b(dense|thick|deep|dark) (forest|woods|jungle)|\bjungle\b|\boverg?rown\b/ },
   openGround: { label: "open ground", words: /\b(field|meadow|plains?|grassland|clearing|hill|hills|open)\b/ },
@@ -36,7 +38,7 @@ const TYPE_WORDS = [
   ["town", /\b(town|village|city|hamlet|market|streets?|square|docks|harbou?r|district|settlement|slums?|shanty ?town|houses|homes|huts|shacks|hovels|cottages|buildings|row of)\b/],
   ["cave", /\b(cave|caves|cavern|caverns|grotto|mine|mines|tunnels?|burrow|lair|underdark|warren)\b/],
   ["dungeon", /\b(dungeon|crypt|tomb|catacombs?|vault|sewers?|fortress|castle|keep|prison|jail|cellar|basement|labyrinth|maze|temple|library|barracks|sanctum|halls|chambers|rooms)\b/],
-  ["wilderness", /\b(forest|woods|wood|jungle|swamp|marsh|bog|field|meadow|road|trail|river|hill|hills|mountain|pass|clearing|camp|coast|beach|desert|plains?|wilderness|grove|glade|valley|ravine)\b/],
+  ["wilderness", /\b(forest|woods|wood|jungle|swamp|marsh|bog|field|meadow|road|trail|river|hill|hills|mountain|pass|clearing|camp|coast|beach|desert|oasis|plains?|wilderness|grove|glade|valley|ravine|outdoors?)\b/],
 ];
 
 /** Read a description with keywords. Returns a plan. */
@@ -47,7 +49,10 @@ export function planFromText(text, { fallbackType = "dungeon", name = "" } = {})
   // else does: a "desert city" is a city, a "forest shrine" is outdoors
   let type = null, at = Infinity;
   for (const [k, re] of TYPE_WORDS) { if (k === "wilderness") continue; const m = re.exec(t); if (m && m.index < at) { at = m.index; type = k; } }
-  if (!type && TYPE_WORDS.find(([k]) => k === "wilderness")[1].test(t)) type = "wilderness";
+  const wild = TYPE_WORDS.find(([k]) => k === "wilderness")[1];
+  if (!type && wild.test(t)) type = "wilderness";
+  // "a cottage in the woods" is outdoors with one building, not the cottage's interior
+  if (type === "tavern" && wild.test(t) && !/\b(inside|interior|common room|taproom|upstairs|cellar|room)\b/.test(t)) type = "wilderness";
   if (/\b(beneath|under|below|underground)\b/.test(t) && /\b(cave|cavern|tunnel|grotto)\b/.test(t)) type = "cave";
   type ||= fallbackType;
   const size = /\b(tiny|small|cramped|little|narrow|short)\b/.test(t) ? "small" : /\b(huge|vast|sprawling|large|big|massive|enormous|great)\b/.test(t) ? "large" : "medium";
@@ -60,8 +65,14 @@ export function planFromText(text, { fallbackType = "dungeon", name = "" } = {})
   const underground = /\b(underground|subterranean|beneath the (surface|earth|ground|mountain)|below (the )?ground|under the (earth|mountain|city|ground)|in a (vast |huge |great )?(cavern|cave))\b/.test(t);
   const layout = /\b(strip|row of|rows of|line of|lined with|single street|one street|long street|main street|one road|leading (up )?to|along (a|the|one) (\w+ )?(road|street|path|avenue|track|causeway|boardwalk))\b/.test(t) ? "strip" : null;
   const landmark = /\b(ziggurat|pyramid|step pyramid|stepped (temple|pyramid|structure|platform))\b/.test(t) ? "ziggurat" : null;
+  // which way things lead: "houses leading north", "the altar at the west end", "northward"
+  const dm = /\b(north|south|east|west)(ward|wards|ern)?\b/.exec(t);
+  const direction = dm ? dm[1] : null;
+  const bm = FEATURES.building.words.exec(t);
+  const buildingNoun = bm ? bm[3] : null;
+  const place = /\b(far (end|side|edge)|other (end|side)|across (the|from))\b/.test(t) ? "far" : /\b(middle|center|centre|heart)\b/.test(t) ? "center" : null;
   const buildingKinds = BUILDING_KINDS.filter(([, re]) => re.test(t)).map(([n]) => n);
-  return normalizePlan({ type, size, rooms, buildings, features, name, underground, layout, landmark, buildingKinds });
+  return normalizePlan({ type, size, rooms, buildings, features, name, underground, layout, landmark, buildingKinds, direction, buildingNoun, place });
 }
 
 // Building kinds a description can name (towns only label what's asked for)
@@ -82,17 +93,19 @@ export function normalizePlan(p = {}) {
     type, size, rooms: clamp(p.rooms, 1, 20), buildings: clamp(p.buildings, 1, 30), features, name: String(p.name || "").slice(0, 80),
     underground: !!p.underground, layout: p.layout === "strip" ? "strip" : null, landmark: p.landmark === "ziggurat" ? "ziggurat" : null,
     buildingKinds: (p.buildingKinds || []).filter((k) => BUILDING_KINDS.some(([n]) => n === k)),
+    direction: ["north", "south", "east", "west"].includes(p.direction) ? p.direction : null,
+    buildingNoun: p.buildingNoun ? String(p.buildingNoun).slice(0, 20) : null, place: ["far", "center"].includes(p.place) ? p.place : null,
   };
 }
 
 export function describePlan(p) {
   const bits = [(p.underground ? "Underground " : "") + MAP_TYPES[p.type].replace(/^./, (c) => (p.underground ? c.toLowerCase() : c)), `${p.size} size`];
-  if (p.layout === "strip") bits.push("one long street");
+  if (p.layout === "strip") bits.push(`one long street${p.direction ? ` leading ${p.direction}` : ""}`);
   if (p.landmark) bits.push(`${p.landmark}${p.layout === "strip" ? " at the end" : " in the center"}`);
   if (p.type === "town") bits.push(p.buildingKinds.length ? `buildings: ${["houses", ...p.buildingKinds.map((k) => k.toLowerCase())].join(", ")}` : "houses");
   if (p.rooms) bits.push(`${p.rooms} room${p.rooms > 1 ? "s" : ""}`);
   if (p.buildings) bits.push(`${p.buildings} buildings`);
-  if (p.features.length) bits.push(p.features.map((f) => FEATURES[f].label).join(", "));
+  if (p.features.length) bits.push(p.features.map((f) => (f === "building" && p.buildingNoun ? `a ${p.buildingNoun}${p.place === "far" ? ` at the ${p.direction ? p.direction + "ern" : "far"} end` : p.place === "center" ? " in the middle" : ""}` : FEATURES[f].label)).join(", "));
   return bits.join(" · ");
 }
 
@@ -109,7 +122,9 @@ export function mapFromPlan(plan, seed = Math.floor(Math.random() * 1e9)) {
   const opts = { w, h: hh, name: p.name || MAP_TYPES[p.type] };
   if (p.type === "dungeon" && p.rooms) opts.rooms = p.rooms;
   const r = rng(seed ^ 0x5bd1e995);
-  const m = p.type === "town" ? buildTown(p, seed, r) : generateMap(p.type, seed, opts);
+  let m = p.type === "town" ? buildTown(p, seed, r) : generateMap(p.type, seed, opts);
+  // a street is built running east; turn it to lead the way the description says
+  if (p.type === "town" && p.layout === "strip" && p.direction && p.direction !== "east") m = orient(m, p.direction);
   applyFeatures(m, p, r);
   m.plan = p;
   return m;
@@ -160,7 +175,13 @@ function applyFeatures(m, p, r) {
       if (has("openGround") && !has("denseTrees") && (v === "T" || v === "f") && r() < 0.7) c[i] = ",";
     }
   }
-  if (p.type === "wilderness" && has("noRoad")) for (let i = 0; i < c.length; i++) if (c[i] === "=") c[i] = ",";
+  if (p.type === "wilderness") {
+    // the base generator adds a river and a road; keep them only if asked for
+    if (!has("river") && !has("bridge")) for (let i = 0; i < c.length; i++) { if (c[i] === "~" || c[i] === "w") c[i] = ","; if (c[i] === "b") c[i] = "="; }
+    if (!has("road") || has("noRoad")) for (let i = 0; i < c.length; i++) if (c[i] === "=") c[i] = ",";
+    if (!has("openGround")) m.labels = m.labels.filter((l) => l.text !== "clearing");
+    if (has("sand") || has("oasis")) for (let i = 0; i < c.length; i++) if (c[i] === "," || c[i] === "f" || (c[i] === "T" && r() < 0.9)) c[i] = r() < 0.06 ? "^" : "s";
+  }
 
   // water: a river crossing the map, or a lake
   const riverCells = [];
@@ -179,7 +200,17 @@ function applyFeatures(m, p, r) {
       }
     }
   }
-  if (has("lake")) {
+  if (has("oasis")) {
+    // a spring-fed pool ringed with palms and grass, in sand
+    const [cx, cy] = p.place === "far" ? [W >> 1, H >> 1] : center();
+    for (let y = cy - 6; y <= cy + 6; y++) for (let x = cx - 8; x <= cx + 8; x++) {
+      const d = Math.hypot((x - cx) / 1.35, y - cy);
+      if (get(x, y) === " " || get(x, y) === "#") continue;
+      if (d < 2.6) set(x, y, "~"); else if (d < 3.6) set(x, y, "w"); else if (d < 5.2) set(x, y, r() < 0.3 ? "T" : ","); else if (d < 6 && r() < 0.4) set(x, y, ",");
+    }
+    label(cx - 1, cy, "Oasis", true);
+  }
+  if (has("lake") && !has("oasis")) {
     const [cx, cy] = has("altar") || has("statue") || has("pillars") ? spot() : center();
     const rad = p.size === "large" ? 5 : p.size === "small" ? 2 : 3;
     let wet = 0;
@@ -250,6 +281,25 @@ function applyFeatures(m, p, r) {
         if (FLOORS.includes(get(x, y))) set(x, y, "t");
       }
     }
+  }
+  if (has("building") && p.type !== "town") {
+    // one small building: at the far end (or the named side), in the middle, or somewhere open
+    const bw = 5, bh = 4;
+    const side = p.direction || "east";
+    let bx, by;
+    if (p.place === "far" || p.direction) {
+      bx = side === "east" ? W - bw - 3 : side === "west" ? 2 : (W - bw) >> 1;
+      by = side === "north" ? 2 : side === "south" ? H - bh - 3 : (H - bh) >> 1;
+    } else if (p.place === "center") { bx = (W - bw) >> 1; by = (H - bh) >> 1; }
+    else { bx = ri(3, W - bw - 3); by = ri(3, H - bh - 3); }
+    const floor = p.type === "cave" ? "c" : p.type === "dungeon" ? "." : "b";
+    for (let y = by - 1; y <= by + bh; y++) for (let x = bx - 1; x <= bx + bw; x++) if (outdoors || FLOORS.includes(get(x, y))) set(x, y, outdoors ? (has("sand") || has("oasis") ? "s" : ",") : get(x, y));
+    for (let y = by; y < by + bh; y++) for (let x = bx; x < bx + bw; x++) set(x, y, x === bx || y === by || x === bx + bw - 1 || y === by + bh - 1 ? (has("ramshackle") && r() < 0.15 ? "^" : "#") : floor);
+    // the door faces the middle of the map
+    const [dx, dy] = side === "east" && (p.place === "far" || p.direction) ? [bx, by + 1 + ri(0, bh - 3)] : side === "west" && p.direction ? [bx + bw - 1, by + 1] : side === "north" && p.direction ? [bx + 2, by + bh - 1] : side === "south" && p.direction ? [bx + 2, by] : [bx + 2, by + bh - 1];
+    set(dx, dy, "+");
+    const noun = p.buildingNoun || "building";
+    label(bx + 1, by + 1, noun[0].toUpperCase() + noun.slice(1), true);
   }
   if (has("stairs") && !c.includes("S")) { const open = floorIdx(); if (open.length) { const i = open[ri(0, open.length - 1)]; c[i] = "S"; label(i % W, Math.floor(i / W), "Stairs"); } }
 
@@ -378,4 +428,27 @@ function buildTown(p, seed, r) {
     if (withAltar) { set(cx, cy, "t"); labels.push({ x: cx - 1, y: cy - 1, text: "Altar", public: false }); return true; }
     return false;
   }
+}
+
+// Turn a map built facing east so its far end faces north, south or west.
+function orient(m, dir) {
+  const W = m.w, H = m.h;
+  const [nw, nh] = dir === "west" ? [W, H] : [H, W];
+  const to = dir === "north" ? (x, y) => [y, W - 1 - x] : dir === "south" ? (x, y) => [H - 1 - y, x] : (x, y) => [W - 1 - x, y];
+  const cells = new Array(nw * nh);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const [nx, ny] = to(x, y); cells[ny * nw + nx] = m.cells[y * W + x]; }
+  const rect = (r) => {
+    const a = to(r.x, r.y), b = to(r.x + r.w - 1, r.y + r.h - 1);
+    const x = Math.min(a[0], b[0]), y = Math.min(a[1], b[1]);
+    return { ...r, x, y, w: Math.abs(a[0] - b[0]) + 1, h: Math.abs(a[1] - b[1]) + 1 };
+  };
+  const rooms = (m.rooms || []).map(rect);
+  // labels sit in the top-left corner of whatever they name
+  const labels = (m.labels || []).map((l) => {
+    const room = (m.rooms || []).findIndex((r) => l.x === r.x + 1 && l.y === r.y + 1);
+    if (room >= 0) return { ...l, x: rooms[room].x + 1, y: rooms[room].y + 1 };
+    const [x, y] = to(l.x, l.y);
+    return { ...l, x: Math.max(0, Math.min(nw - 3, x)), y };
+  });
+  return { ...m, w: nw, h: nh, cells: cells.join(""), rooms, labels, fog: "0".repeat(nw * nh), tokens: [] };
 }

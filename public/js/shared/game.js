@@ -1,7 +1,7 @@
 // Game state and rules for one table. Runs on the Node server, or in the GM's
 // browser when the app is hosted without a server (see cloud.js).
 import { rollDice, degreeOfSuccess, DEGREES } from "./dice.js";
-import { visibleFrom } from "./vision.js";
+import { visibleFrom, footprintClear, canReach, AMBIENT } from "./vision.js";
 import { startingGold } from "./rules.js";
 
 export const MAX_PLAYERS = 6;
@@ -54,7 +54,7 @@ function fogView(map) {
   // layout of unexplored rooms never reaches their browser.
   const cells = map.cells.split("").map((c, i) => (map.fog[i] === "1" ? c : "?")).join("");
   const tokens = map.tokens.filter((t) => !t.hidden && map.fog[t.y * map.w + t.x] === "1");
-  return { id: map.id, name: map.name, w: map.w, h: map.h, cells, fog: map.fog, tokens, theme: map.theme, labels: (map.labels || []).filter((l) => l.public && map.fog[l.y * map.w + l.x] === "1") };
+  return { id: map.id, name: map.name, w: map.w, h: map.h, cells, fog: map.fog, tokens, theme: map.theme, ambient: map.ambient || "bright", lights: (map.lights || []).filter((l) => map.fog[l.y * map.w + l.x] === "1"), labels: (map.labels || []).filter((l) => l.public && map.fog[l.y * map.w + l.x] === "1") };
 }
 
 export function viewFor(game, auth) {
@@ -237,6 +237,17 @@ export function applyAction(game, auth, type, p = {}) {
       return clean.id;
     }
     case "setActiveMap": dmOnly(); game.activeMapId = p.id; return;
+    case "lighting": {
+      // ambient light and placed light sources (braziers, torches on walls)
+      dmOnly();
+      const m = game.maps.find((x) => x.id === (p.mapId || game.activeMapId));
+      if (!m) throw new Error("No active map.");
+      if (p.ambient && AMBIENT[p.ambient]) m.ambient = p.ambient;
+      m.lights ||= [];
+      if (p.op === "add") m.lights.push({ id: id(), x: p.x | 0, y: p.y | 0, r: Math.max(1, Math.min(24, p.r | 0 || 4)) });
+      if (p.op === "remove") m.lights = m.lights.filter((l) => l.id !== p.id);
+      return;
+    }
     case "deleteMap": dmOnly(); game.maps = game.maps.filter((m) => m.id !== p.id); if (game.activeMapId === p.id) game.activeMapId = game.maps[0]?.id || null; return;
     case "fog": {
       dmOnly();
@@ -254,15 +265,29 @@ export function applyAction(game, auth, type, p = {}) {
       if (p.op === "move") {
         const t = m.tokens.find((x) => x.id === p.id);
         if (!t) return;
+        const size = t.size || 1;
+        const to = { x: Math.max(0, Math.min(m.w - size, p.x | 0)), y: Math.max(0, Math.min(m.h - size, p.y | 0)) };
         if (!gm) {
           if (t.slot !== auth.slot || m.id !== game.activeMapId) throw new Error("You can only move your own token.");
-          const i = p.y * m.w + p.x;
-          if (m.fog[i] !== "1" || "#~".includes(m.cells[i]) ) throw new Error("You can't move there.");
+          if (m.fog[to.y * m.w + to.x] !== "1") throw new Error("You can't move there.");
         }
-        if (!isDM && gm && t.kind !== "pc" && m.fog[(p.y | 0) * m.w + (p.x | 0)] !== "1") throw new Error("You can't see that square.");
-        t.x = Math.max(0, Math.min(m.w - 1, p.x | 0));
-        t.y = Math.max(0, Math.min(m.h - 1, p.y | 0));
+        if (!isDM && gm && t.kind !== "pc" && m.fog[to.y * m.w + to.x] !== "1") throw new Error("You can't see that square.");
+        // only the GM can put a token in or through solid squares
+        if (!isDM) {
+          if (!footprintClear(m, to.x, to.y, size)) throw new Error("That square is solid.");
+          if (!canReach(m, { x: t.x, y: t.y }, to, size)) throw new Error("There's no way through to there.");
+        }
+        t.x = to.x;
+        t.y = to.y;
         if (game.autoReveal && (t.kind === "pc" || t.kind === "ally")) revealAround(m);
+        return;
+      }
+      if (p.op === "light") {
+        // carry a light (radius in squares); players may light their own token
+        const t = m.tokens.find((x) => x.id === p.id);
+        if (!t) return;
+        if (!gm && t.slot !== auth.slot) throw new Error("You can only light your own token.");
+        t.light = Math.max(0, Math.min(24, p.light | 0));
         return;
       }
       dmOnly();

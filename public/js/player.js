@@ -55,6 +55,10 @@ export function mountPlayer(app, { home } = {}) {
     isDM: false,
     mySlot: null,
     onTokenMove: (t, x, y) => act("token", { op: "move", id: t.id, x, y }).catch((e) => toast(e.message, "error")),
+    onTokenLight: (t, light) => act("token", { op: "light", id: t.id, light }).catch((e) => toast(e.message, "error")),
+    onLight: (p) => act("lighting", { ...p }).catch((e) => toast(e.message, "error")),
+    onAmbient: (ambient) => act("lighting", { ambient }).catch((e) => toast(e.message, "error")),
+    visionOf: (t) => { const c = t.slot !== null && t.slot !== undefined ? state?.characters?.[state.slots[t.slot]?.characterId] : null; try { return c ? computeCharacter(c, coreData()).vision || "normal" : "normal"; } catch { return "normal"; } },
   });
 
   let pendingSave = null; // { draft, prev } while the GM's game applies a save

@@ -1,5 +1,5 @@
 import { h, clear, cap, tabs, toast, modal, field, select, copyText, debounce, isMobile, onLayoutChange, actionSheet, confirmDialog, promptDialog, formDialog, MODE, groupedSelect, classGroups, themeToggle } from "./ui.js";
-import { planFromText, normalizePlan, mapFromPlan, describePlan } from "./mapdesc.js";
+import { planFromText, mapFromPlan, describePlan } from "./mapdesc.js";
 import { shopsPanel } from "./shops.js";
 import { act, connect, session, askAI, config, shareInfo, exportGame, canPrint, isArtifact } from "./transport.js";
 import { coreData, load } from "./data.js";
@@ -43,6 +43,9 @@ export async function mountDM(app, { home } = {}) {
     onFog: (cells, reveal) => act("fog", { mapId: state.activeMapId, cells, reveal }).catch((e) => toast(e.message, "error")),
     onPaint: (m) => savePaint(m),
     onTokenAdd: (x, y) => tokenDialog(x, y),
+    onLight: (p) => act("lighting", { mapId: state.activeMapId, ...p }).catch((e) => toast(e.message, "error")),
+    onAmbient: (ambient) => act("lighting", { mapId: state.activeMapId, ambient }).catch((e) => toast(e.message, "error")),
+    visionOf: (t) => { const c = t.slot !== null && t.slot !== undefined ? state?.characters?.[state.slots[t.slot]?.characterId] : null; try { return c ? computeCharacter(c, coreData()).vision || "normal" : "normal"; } catch { return "normal"; } },
     onLabelAdd: async (x, y) => {
       const r = await formDialog("Add label", [
         { name: "text", label: "Label text" },
@@ -176,16 +179,6 @@ export async function mountDM(app, { home } = {}) {
       desc,
       h("div", { class: "row wrap" },
         h("button", { class: "primary", onclick: () => desc.value.trim() && build(planFromText(desc.value, { name })) }, "Build from description"),
-        ai ? h("button", { onclick: async (e) => {
-          if (!desc.value.trim()) return;
-          e.target.disabled = true; e.target.textContent = "Reading…";
-          try {
-            const r = await ai("map", desc.value.trim());
-            const m = r.text.match(/\{[\s\S]*\}/);
-            build(normalizePlan({ ...JSON.parse(m ? m[0] : r.text), name }));
-          } catch (err) { toast("The AI's reading couldn't be used; built from keywords instead.", "error"); build(planFromText(desc.value, { name })); }
-          e.target.disabled = false; e.target.textContent = "✨ Read it with AI";
-        } }, "✨ Read it with AI") : null,
         h("button", { onclick: () => plan && build(plan) }, "🎲 Another take")),
       understood));
     box.append(h("section", { class: "bsec" }, h("h3", {}, "Generate a map"),

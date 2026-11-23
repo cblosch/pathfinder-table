@@ -1,7 +1,6 @@
 // The one AI feature: writing handout text. Shared by the server (Claude API)
 // and the hosted version (the page's own Claude access).
 export const TASKS = {
-  map: "Read the GM's description of a place for a battle map and reply with JSON only, no prose: {\"type\":\"dungeon|cave|wilderness|town|tavern\",\"size\":\"small|medium|large\",\"rooms\":null,\"buildings\":null,\"underground\":false,\"layout\":null,\"landmark\":null,\"buildingKinds\":[],\"features\":[]}. type: dungeon for built interiors with rooms and corridors (crypts, temples, keeps, sewers), cave for natural caverns and mines, wilderness for outdoors, town for streets and buildings, tavern for a single building's interior. rooms or buildings: a number only if the description gives one. underground: true if the place is below ground. layout: \"strip\" if buildings line a single long street, else null. landmark: \"ziggurat\" for a stepped pyramid or ziggurat, else null. buildingKinds: only kinds the description names, from Tavern, Smithy, Temple, Shrine, Shop, Barracks, Jail, Warehouse, Stables, Hall, Library, Workshop, Cult house (ordinary homes are implied). features: any of river, lake, bridge, chasm, pillars, altar, statue, rubble, ruins, camp, road, noRoad, stairs, furniture, swamp, sand, denseTrees, openGround, ramshackle that the description implies.",
   handout: "Write the text of an in-world handout (letter, notice, journal page, poster, etc.). Write only what appears on the document itself, in the voice of whoever wrote it. Include only information the GM says the players should get.",
 };
 
@@ -34,7 +33,7 @@ export const SYSTEM = "You are a helpful assistant to the Game Master of a Pathf
 
 export function userPrompt(game, task, prompt) {
   const instructions = TASKS[task];
-  if (!instructions) throw new Error("The AI only reads map descriptions and writes handouts.");
+  if (!instructions) throw new Error("The AI only writes handouts.");
   const recent = game.log.filter((l) => l.type !== "roll").slice(-15).map((l) => `${l.who || "System"}: ${l.text || ""}`).join("\n");
   return `${instructions}\n\nRecent table talk:\n${recent || "(none)"}\n\nGM request: ${String(prompt || "").slice(0, 4000)}`;
 }

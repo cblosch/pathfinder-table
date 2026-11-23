@@ -323,13 +323,15 @@ export function generateMap(type, seed = Math.floor(Math.random() * 1e9), opts =
 // ---------------------------------------------------------------
 // Geometry helpers
 // ---------------------------------------------------------------
-export { pf2Distance, visibleFrom, roomCells } from "./shared/vision.js";
-import { pf2Distance, roomCells } from "./shared/vision.js";
+export { pf2Distance, visibleFrom, roomCells, AMBIENT } from "./shared/vision.js";
+import { pf2Distance, roomCells, footprintClear, canReach, lightLevels, partySight, AMBIENT } from "./shared/vision.js";
 
 // ---------------------------------------------------------------
 // Canvas view with tools
 // ---------------------------------------------------------------
-export function createMapView({ isDM, mySlot = null, onTokenMove, onFog, onPaint, onTokenAdd, onTokenClick, onLabelAdd }) {
+export function createMapView({ isDM, mySlot = null, onTokenMove, onFog, onPaint, onTokenAdd, onTokenClick, onLabelAdd, onLight, onAmbient, onTokenLight, visionOf = () => "normal" }) {
+  let partyView = false; // GM: see the map exactly as the party does
+  let coGM = false; // GM-less tables: players can move any token they can see
   let map = null;
   let cs = 26;
   let tool = "move";
@@ -343,9 +345,10 @@ export function createMapView({ isDM, mySlot = null, onTokenMove, onFog, onPaint
   const ctx = canvas.getContext("2d");
   const wrap = h("div", { class: "map-wrap" }, canvas);
   const status = h("span", { class: "map-status muted" });
+  const view = h("div", { class: "map-view" });
 
   const toolDefs = isDM
-    ? [["move", "✋", "Move"], ["reveal", "☀", "Reveal"], ["hide", "☾", "Hide"], ["room", "▣", "Reveal room"], ["paint", "✎", "Paint"], ["token", "●", "Add token"], ["label", "🏷", "Label"], ["measure", "📏", "Measure"]]
+    ? [["move", "✋", "Move"], ["reveal", "☀", "Reveal"], ["hide", "☾", "Hide"], ["room", "▣", "Reveal room"], ["paint", "✎", "Paint"], ["token", "●", "Add token"], ["label", "🏷", "Label"], ["light", "💡", "Light"], ["measure", "📏", "Measure"]]
     : [["move", "✋", "Move my token"], ["measure", "📏", "Measure"]];
   const toolbar = h("div", { class: "map-toolbar" });
   const brushSel = select(Object.entries(TERRAIN).filter(([k]) => k !== "?").map(([k, v]) => ({ value: k, label: `${k === " " ? "␣" : k}  ${v.name}` })), brush, (v) => { brush = v; });
@@ -353,13 +356,35 @@ export function createMapView({ isDM, mySlot = null, onTokenMove, onFog, onPaint
     clear(toolbar);
     const tools = h("div", { class: "map-tools" }, toolDefs.map(([id, icon, label]) =>
       h("button", { class: tool === id ? "active small" : "small", title: label, onclick: () => { tool = id; selected = null; drawToolbar(); draw(); } }, h("span", {}, icon), h("span", { class: "tool-text" }, label))));
-    toolbar.append(tools, tool === "paint" ? brushSel : null,
+    const mine = map?.tokens.find((t) => t.slot !== null && t.slot !== undefined && t.slot === mySlot);
+    const extras = h("div", { class: "map-tools map-light" },
+      (isDM || coGM) && onAmbient ? select(Object.entries(AMBIENT).map(([value, label]) => ({ value, label })), map?.ambient || "bright", (v) => { if (map) map.ambient = v; onAmbient(v); draw(); }, { title: "Ambient light on this map" }) : null,
+      isDM ? h("button", { class: partyView ? "active small" : "small", title: "See the map as the party sees it", onclick: () => { partyView = !partyView; drawToolbar(); draw(); } }, h("span", {}, "👁"), h("span", { class: "tool-text" }, partyView ? "Party view on" : "Party view")) : null,
+      !isDM && mine && onTokenLight ? h("button", { class: mine.light ? "active small" : "small", title: "Carry a torch: bright light 20 ft, dim light 20 ft more", onclick: () => onTokenLight(mine, mine.light ? 0 : 4) }, h("span", {}, "🔥"), h("span", { class: "tool-text" }, mine.light ? "Torch lit" : "Light a torch")) : null);
+    toolbar.append(tools, extras, tool === "paint" ? brushSel : null,
       h("div", { class: "map-zoom" },
         h("button", { class: "small", title: "Zoom out", onclick: () => zoomAt(cs / 1.25) }, "−"),
         h("button", { class: "small", title: "Fit whole map", onclick: () => fit() }, "Fit"),
         h("button", { class: "small", title: "Center on my token or the explored area", onclick: () => focus() }, "◎"),
-        h("button", { class: "small", title: "Zoom in", onclick: () => zoomAt(cs * 1.25) }, "+"), status));
+        h("button", { class: "small", title: "Zoom in", onclick: () => zoomAt(cs * 1.25) }, "+"),
+        h("button", { class: "small", title: full ? "Leave full screen (Esc)" : "Full screen", onclick: () => toggleFull() }, full ? "✕ Exit full screen" : "⛶ Full screen"), status));
   };
+
+  // ---- full screen: the browser's full screen where allowed, otherwise the map fills the window ----
+  let full = false;
+  function toggleFull(on = !full) {
+    full = on;
+    view.classList.toggle("map-full", full);
+    document.body.classList.toggle("map-full-open", full);
+    try {
+      if (full && view.requestFullscreen && !document.fullscreenElement) view.requestFullscreen().catch(() => {});
+      if (!full && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    } catch {}
+    drawToolbar();
+    requestAnimationFrame(() => fit());
+  }
+  document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement && full) toggleFull(false); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && full) toggleFull(false); });
 
   // ---- zoom helpers ----
   const MIN_CS = 8, MAX_CS = 64;
@@ -396,6 +421,7 @@ export function createMapView({ isDM, mySlot = null, onTokenMove, onFog, onPaint
     wrap.scrollLeft = cx * cs - wrap.clientWidth / 2;
     wrap.scrollTop = cy * cs - wrap.clientHeight / 2;
   }
+  view.append(toolbar, wrap);
   drawToolbar();
 
   function cellAt(ev) {
@@ -405,13 +431,23 @@ export function createMapView({ isDM, mySlot = null, onTokenMove, onFog, onPaint
     return { x, y, i: y * map.w + x };
   }
   const tokenAt = (x, y) => map.tokens.slice().reverse().find((t) => x >= t.x && x < t.x + (t.size || 1) && y >= t.y && y < t.y + (t.size || 1));
-  let coGM = false; // GM-less tables: players can move any token they can see
   const movable = (t) => isDM || coGM || (t.slot !== null && t.slot !== undefined && t.slot === mySlot);
 
   // ---- pointer handling: mouse, pen and touch ----
   // One finger: tool action, or pan when touching empty space with the move tool.
   // Two fingers: pinch to zoom (and pan). Tap a token, then tap a square, to move it.
   let selected = null;
+  let selectedGrab = { dx: 0, dy: 0 };
+  // players (and GM-less tables) can't enter or pass through solid squares
+  const tryMove = (t, to) => {
+    if (!isDM && !(footprintClear(map, to.x, to.y, t.size || 1) && canReach(map, { x: t.x, y: t.y }, to, t.size || 1))) {
+      status.textContent = footprintClear(map, to.x, to.y, t.size || 1) ? "No way through to there" : "That square is solid";
+      return false;
+    }
+    t.x = to.x; t.y = to.y;
+    onTokenMove && onTokenMove(t, to.x, to.y);
+    return true;
+  };
   const pointers = new Map();
   let pinch = null, pan = null;
   const dist = () => { const [a, b] = [...pointers.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
@@ -441,7 +477,8 @@ export function createMapView({ isDM, mySlot = null, onTokenMove, onFog, onPaint
     if (!c) return startPan();
     if (tool === "move") {
       const t = tokenAt(c.x, c.y);
-      if (t && movable(t)) drag = { t, from: { x: t.x, y: t.y }, to: c, moved: false };
+      // the square you grab stays under the pointer, so big tokens move by the tile you picked
+      if (t && movable(t)) drag = { t, from: { x: t.x, y: t.y }, grab: { dx: c.x - t.x, dy: c.y - t.y }, to: { x: t.x, y: t.y }, moved: false };
       else startPan();
     } else if (tool === "measure") {
       drag = { measure: true, from: c, to: c };
@@ -454,6 +491,9 @@ export function createMapView({ isDM, mySlot = null, onTokenMove, onFog, onPaint
       onTokenAdd && onTokenAdd(c.x, c.y);
     } else if (tool === "label") {
       onLabelAdd && onLabelAdd(c.x, c.y);
+    } else if (tool === "light") {
+      const at = (map.lights || []).find((l) => l.x === c.x && l.y === c.y);
+      onLight && onLight(at ? { op: "remove", id: at.id } : { op: "add", x: c.x, y: c.y, r: 4 });
     }
   });
 
@@ -482,8 +522,16 @@ export function createMapView({ isDM, mySlot = null, onTokenMove, onFog, onPaint
       status.textContent = `${c.x},${c.y} · ${TERRAIN[ch]?.name || ""}`;
     }
     if (drag && c) {
-      if (c.x !== drag.from.x || c.y !== drag.from.y) drag.moved = true;
-      drag.to = c; draw();
+      if (drag.t) {
+        const size = drag.t.size || 1;
+        const to = { x: Math.max(0, Math.min(map.w - size, c.x - drag.grab.dx)), y: Math.max(0, Math.min(map.h - size, c.y - drag.grab.dy)) };
+        if (to.x !== drag.from.x || to.y !== drag.from.y) drag.moved = true;
+        drag.to = to;
+      } else {
+        if (c.x !== drag.from.x || c.y !== drag.from.y) drag.moved = true;
+        drag.to = c;
+      }
+      draw();
     } else if (painting && c) applyBrush(c);
   });
 
@@ -495,11 +543,11 @@ export function createMapView({ isDM, mySlot = null, onTokenMove, onFog, onPaint
       if (!p.moved && p.cell && tool === "move") {
         const t = tokenAt(p.cell.x, p.cell.y);
         const sel = selected && map.tokens.find((x) => x.id === selected);
-        if (sel && !t) {
-          // tap-to-move: selected token goes to the tapped square
-          sel.x = p.cell.x; sel.y = p.cell.y;
-          onTokenMove && onTokenMove(sel, p.cell.x, p.cell.y);
-          showMove(sel, p.from || null);
+        if (sel && (!t || t === sel)) {
+          // tap-to-move: the tile you picked on the token goes to the tapped square
+          const size = sel.size || 1;
+          const to = { x: Math.max(0, Math.min(map.w - size, p.cell.x - selectedGrab.dx)), y: Math.max(0, Math.min(map.h - size, p.cell.y - selectedGrab.dy)) };
+          if (tryMove(sel, to)) showMove(sel, p.from || null);
           selected = null;
         } else if (t && onTokenClick) onTokenClick(t);
         else selected = null;
@@ -510,13 +558,13 @@ export function createMapView({ isDM, mySlot = null, onTokenMove, onFog, onPaint
     if (drag && drag.t) {
       const t = drag.t;
       if (drag.moved && (drag.to.x !== drag.from.x || drag.to.y !== drag.from.y)) {
-        t.x = drag.to.x; t.y = drag.to.y;
-        onTokenMove && onTokenMove(t, drag.to.x, drag.to.y);
+        tryMove(t, drag.to);
         selected = null;
       } else {
-        // a tap on your own token selects it for tap-to-move
+        // a tap on your own token selects it (and the tile you tapped) for tap-to-move
         selected = selected === t.id ? null : t.id;
-        if (selected) status.textContent = "Tap a square to move there";
+        selectedGrab = drag.grab || { dx: 0, dy: 0 };
+        if (selected) status.textContent = (t.size || 1) > 1 ? "Tap where that tile should go" : "Tap a square to move there";
       }
     }
     finishPaint();
@@ -551,9 +599,17 @@ export function createMapView({ isDM, mySlot = null, onTokenMove, onFog, onPaint
     if (!map) { canvas.width = 10; canvas.height = 10; return; }
     if (fitPending && wrap.clientWidth) { fitPending = false; focus(); return; }
     canvas.width = map.w * cs; canvas.height = map.h * cs;
+    // what the party sees: players always, the GM in party view
+    const asParty = !isDM || partyView;
+    const level = lightLevels(map);
+    const hasParty = map.tokens.some((t) => t.kind === "pc" || t.kind === "ally");
+    const sight = hasParty ? partySight(map, visionOf, level) : null;
+    const shown = (i) => !sight || sight.has(i);
     ctx.font = `${Math.max(9, cs * 0.42)}px Fondamento, "IM Fell English", serif`;
     for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
-      const ch = map.cells[y * map.w + x];
+      const idx = y * map.w + x;
+      let ch = map.cells[idx];
+      if (asParty && map.fog[idx] !== "1") ch = "?";
       const t = TERRAIN[ch] || TERRAIN["."];
       const px = x * cs, py = y * cs;
       ctx.fillStyle = t.color;
@@ -567,10 +623,26 @@ export function createMapView({ isDM, mySlot = null, onTokenMove, onFog, onPaint
       else if (ch === "f") { ctx.fillStyle = "#47703a"; for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.arc(px + cs * (0.25 + k * 0.25), py + cs * (0.3 + (k % 2) * 0.35), cs * 0.12, 0, 7); ctx.fill(); } }
       else if (ch === "~" || ch === "w") { ctx.strokeStyle = "rgba(255,255,255,.25)"; ctx.beginPath(); ctx.moveTo(px + 3, py + cs / 2); ctx.quadraticCurveTo(px + cs / 2, py + cs / 3, px + cs - 3, py + cs / 2); ctx.stroke(); }
       if (ch !== "?" && ch !== " ") { ctx.strokeStyle = "rgba(0,0,0,.12)"; ctx.strokeRect(px + 0.5, py + 0.5, cs, cs); }
-      if (isDM && !suppressFog && map.fog[y * map.w + x] !== "1") { ctx.fillStyle = "rgba(10,10,30,.45)"; ctx.fillRect(px, py, cs, cs); }
+      if (isDM && !partyView && !suppressFog && map.fog[idx] !== "1") { ctx.fillStyle = "rgba(10,10,30,.45)"; ctx.fillRect(px, py, cs, cs); }
+      if (ch !== "?" && !suppressFog) {
+        if (asParty) {
+          // explored but out of sight: remembered, drawn dark; in sight: lit as it is
+          if (!shown(idx)) { ctx.fillStyle = "rgba(8,6,4,.58)"; ctx.fillRect(px, py, cs, cs); }
+          else if (level[idx] === 1) { ctx.fillStyle = "rgba(10,8,20,.22)"; ctx.fillRect(px, py, cs, cs); }
+          else if (level[idx] === 0) { ctx.fillStyle = "rgba(20,24,30,.38)"; ctx.fillRect(px, py, cs, cs); } // seen with darkvision
+        } else if (level[idx] < 2) { ctx.fillStyle = level[idx] ? "rgba(10,8,20,.15)" : "rgba(10,8,20,.32)"; ctx.fillRect(px, py, cs, cs); }
+      }
     }
     // labels
+    // light sources
+    for (const l of map.lights || []) {
+      if (asParty && map.fog[l.y * map.w + l.x] !== "1") continue;
+      ctx.font = `${Math.max(9, cs * 0.6)}px serif`; ctx.textAlign = "center";
+      ctx.fillText("🔥", l.x * cs + cs / 2, l.y * cs + cs * 0.72); ctx.textAlign = "left";
+      ctx.font = `${Math.max(9, cs * 0.42)}px Fondamento, "IM Fell English", serif`;
+    }
     for (const l of map.labels || []) {
+      if (asParty && (!l.public || map.fog[l.y * map.w + l.x] !== "1")) continue;
       ctx.fillStyle = l.public ? "rgba(255,255,240,.85)" : "rgba(255,220,120,.9)";
       const tw = ctx.measureText(l.text).width + 6;
       ctx.fillRect(l.x * cs, l.y * cs, tw, cs * 0.6);
@@ -580,6 +652,8 @@ export function createMapView({ isDM, mySlot = null, onTokenMove, onFog, onPaint
     // tokens
     for (const t of map.tokens) {
       const size = t.size || 1;
+      // the party only sees hidden tokens never, and others only where they can see right now
+      if (asParty && (t.hidden || (t.kind !== "pc" && t.kind !== "ally" && !shown(t.y * map.w + t.x)))) continue;
       const tx = (drag?.t === t ? drag.to.x : t.x) * cs, ty = (drag?.t === t ? drag.to.y : t.y) * cs;
       ctx.globalAlpha = t.hidden ? 0.45 : 1;
       ctx.fillStyle = t.color || "#c33";
@@ -587,6 +661,7 @@ export function createMapView({ isDM, mySlot = null, onTokenMove, onFog, onPaint
       ctx.lineWidth = 2; ctx.strokeStyle = t.kind === "pc" ? "#fff" : t.kind === "ally" ? "#9f9" : "#300";
       if (t.hidden) ctx.setLineDash([3, 3]);
       ctx.stroke(); ctx.setLineDash([]); ctx.lineWidth = 1;
+      if (t.light > 0) { ctx.font = `${Math.max(8, cs * 0.4)}px serif`; ctx.fillText("🔥", tx + cs * size - cs * 0.42, ty + cs * 0.38); ctx.font = `${Math.max(9, cs * 0.42)}px Fondamento, "IM Fell English", serif`; }
       if (t.id === selected) { ctx.strokeStyle = "#ffd200"; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(tx + (cs * size) / 2, ty + (cs * size) / 2, cs * size * 0.5, 0, 7); ctx.stroke(); ctx.lineWidth = 1; }
       ctx.fillStyle = "#fff";
       ctx.textAlign = "center";
@@ -596,7 +671,8 @@ export function createMapView({ isDM, mySlot = null, onTokenMove, onFog, onPaint
     }
     // drag / measure overlay
     if (drag) {
-      const a = drag.t ? drag.from : drag.from, b = drag.to;
+      const a = drag.t ? { x: drag.from.x + drag.grab.dx, y: drag.from.y + drag.grab.dy } : drag.from;
+      const b = drag.t ? { x: drag.to.x + drag.grab.dx, y: drag.to.y + drag.grab.dy } : drag.to;
       ctx.strokeStyle = "#ff0"; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.moveTo(a.x * cs + cs / 2, a.y * cs + cs / 2); ctx.lineTo(b.x * cs + cs / 2, b.y * cs + cs / 2); ctx.stroke();
       ctx.lineWidth = 1;
@@ -607,16 +683,21 @@ export function createMapView({ isDM, mySlot = null, onTokenMove, onFog, onPaint
   }
 
   return {
-    el: h("div", { class: "map-view" }, toolbar, wrap),
+    el: view,
     setMap(m) {
       if (m && (m.id || m.seed) !== (map?.id || map?.seed) && isMobile()) { fitPending = true; requestAnimationFrame(() => draw()); }
+      const sig = (x) => (x ? `${x.id}|${x.ambient || ""}|${(x.tokens || []).filter((t) => t.slot === mySlot).map((t) => t.light || 0).join()}` : "");
+      const toolbarChanged = sig(m) !== sig(map);
       map = m ? { ...m, tokens: m.tokens.map((t) => ({ ...t })) } : null;
+      if (toolbarChanged) drawToolbar();
       if (!drag && !painting && !pinch) draw();
     },
     fit,
     get map() { return map; },
     setSlot(v) { mySlot = v; },
-    setCoGM(v) { coGM = !!v; },
+    setCoGM(v) { if (coGM !== !!v) { coGM = !!v; drawToolbar(); } },
+    setVision(fn) { visionOf = fn; draw(); },
+    refreshToolbar: () => drawToolbar(),
     redraw: draw,
     snapshot(x0, y0, w, hh, scale = 16) {
       // render part of the current map to a data URL (for map-fragment handouts)
