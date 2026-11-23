@@ -891,3 +891,39 @@ select, input, textarea { max-width: 100%; min-width: 0; }
     background: linear-gradient(180deg, var(--page) 0, var(--page) calc(100% - 14px), transparent);
   }
 }
+
+/* tab groups: character | campaign | reference */
+.tab-sep { align-self: stretch; width: 1px; margin: .2em .7em; background: linear-gradient(180deg, transparent, var(--muted) 25%, var(--muted) 75%, transparent); opacity: .6; position: relative; }
+.tab-sep::after { content: "◆"; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: .55em; color: var(--muted); background: var(--page, var(--bg)); padding: .1em 0; }
+.pets-on-sheet .pet-card + .pet-card { margin-top: 1.2em; }
+@media (min-width: 761px) {
+  /* flat tab labels, no gradient */
+  .tabs:not(.bottom-nav) button { background: var(--tab); }
+  .tabs:not(.bottom-nav) button.active { background: var(--ribbon); }
+}
+/* sheet columns are containers too, so the attribute boxes wrap in a narrow column */
+.sheet-cols > section { container-type: inline-size; min-width: 0; }
+/* the sheet follows its page width too */
+.sheet { container: sheet / inline-size; }
+.sheet-vitals > *, .sheet-cols > * { min-width: 0; }
+.strike .row { flex-wrap: wrap; }
+@container sheet (max-width: 1000px) {
+  .sheet-vitals { grid-template-columns: repeat(auto-fit, minmax(9.5em, 1fr)); }
+  .sheet-vitals .vital.hp { grid-column: span 2; }
+  .sheet-cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); }
+  .sheet-cols > section:nth-child(3) { grid-column: 1 / -1; }
+}
+@container sheet (max-width: 560px) {
+  .sheet-cols { grid-template-columns: minmax(0, 1fr); }
+  .sheet-vitals .vital.hp { grid-column: 1 / -1; }
+}
+.strike .row .rollable, .strike .row button { width: auto; flex: 0 0 auto; }
+
+/* Handwritten text everywhere: set on body (not just :root) so a host page's
+   own body font can't take over unstyled text such as list items. */
+html body, body li, body td, body th, body p, body label, body summary, body dd, body dt, body input, body select, body textarea, body option {
+  font-family: var(--font-body);
+}
+body h1, body h2, body h3, body h4, body .bsec > h3, body .card > h2, body .brand, body .sum-title, body .tabs:not(.bottom-nav) button { font-family: var(--font-black); }
+body .ho-clue, body .ho-clue * { font-family: var(--font-scrawl); }
+body .attr strong, body .vital .big, body .big-dc, body .roll-total .total { font-family: var(--font-display); }

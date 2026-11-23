@@ -89,7 +89,12 @@ export function tabs(defs, { onChange, initial, persistKey } = {}) {
     clear(bar);
     bar.classList.toggle("bottom-nav", isMobile());
     if (!isMobile()) {
-      for (const d of visible()) bar.append(h("button", { class: d.id === current ? "active" : "", onclick: () => select(d.id) }, d.label, badgeOf(d) ? h("span", { class: "badge" }, badgeOf(d)) : null));
+      let group = null;
+      for (const d of visible()) {
+        if (d.group && group && d.group !== group) bar.append(h("span", { class: "tab-sep", "aria-hidden": "true" }));
+        group = d.group || group;
+        bar.append(h("button", { class: d.id === current ? "active" : "", onclick: () => select(d.id) }, d.label, badgeOf(d) ? h("span", { class: "badge" }, badgeOf(d)) : null));
+      }
       return;
     }
     const prim = visible().filter((d) => d.primary);

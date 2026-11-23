@@ -92,6 +92,7 @@ export function mountPlayer(app, { home } = {}) {
       return box;
     }
     box.append(renderSheet(c, { editable: true, onEdit: () => { building = true; tabset.refresh(); } }),
+      h("section", { class: "bsec pets-on-sheet" }, h("h3", {}, "Pets & companions"), petsTab(state, { myCharId: c.id, act })),
       h("div", { class: "row wrap sheet-lib" },
         h("button", { class: "small", onclick: async () => { try { await saveToLibrary(c); toast(`Saved a copy of ${c.name} to My characters`); } catch (e) { toast(e.message, "error"); } } }, "Save a copy to My characters"),
         h("button", { class: "small", onclick: async () => { if (await confirmDialog(`Swap ${c.name} for one of your saved characters? ${c.name}'s progress in this game is replaced (save a copy first if you want to keep it).`, { ok: "Choose character" })) useSaved(); } }, "Swap in a saved character")));
@@ -174,19 +175,18 @@ export function mountPlayer(app, { home } = {}) {
   const unseen = () => state ? state.handouts.filter((x) => !seenHandouts.has(x.id)).length : 0;
   let tabset;
   const makeTabs = () => tabs([
-    { id: "character", label: "Character", icon: "🧙", short: "Hero", primary: true, render: characterTab },
-    { id: "map", label: "Map", icon: "🗺️", primary: true, render: mapTab },
-    { id: "play", label: "Initiative & chat", icon: "💬", short: "Play", primary: true, mobileOnly: true, badge: unreadLog, render: playTab },
+    { id: "character", group: "character", label: "Character", icon: "🧙", short: "Hero", primary: true, render: characterTab },
+    { id: "map", group: "campaign", label: "Map", icon: "🗺️", primary: true, render: mapTab },
+    { id: "play", group: "campaign", label: "Initiative & chat", icon: "💬", short: "Play", primary: true, mobileOnly: true, badge: unreadLog, render: playTab },
     ...(state.gmless ? [
-      { id: "story", label: "Story", icon: "📖", primary: true, render: storyTab },
-      { id: "fight", label: "Fight", icon: "⚔️", render: () => encounterBuilder(state, { onSpawn: (creatures) => act("spawnEncounter", { creatures }).then(() => { toast("The fight is on! See initiative."); tabset.select(isMobile() ? "play" : "map"); }).catch((e) => toast(e.message, "error")) }) },
+      { id: "story", group: "campaign", label: "Story", icon: "📖", primary: true, render: storyTab },
+      { id: "fight", group: "campaign", label: "Fight", icon: "⚔️", render: () => encounterBuilder(state, { onSpawn: (creatures) => act("spawnEncounter", { creatures }).then(() => { toast("The fight is on! See initiative."); tabset.select(isMobile() ? "play" : "map"); }).catch((e) => toast(e.message, "error")) }) },
     ] : []),
-    { id: "handouts", label: "Handouts", icon: "📜", primary: !state.gmless, badge: () => unseen(), render: handoutsTab },
-    { id: "pets", label: "Pets", icon: "🐾", render: () => petsTab(state, { myCharId: state.slots[state.me.slot]?.characterId || null, act }) },
-    { id: "shops", label: "Shops", icon: "🏪", badge: () => (state.shops || []).filter((x) => x.open).length, render: () => shopsPanel(state, { gm: !!state.gmless, myCharId: state.slots[state.me.slot]?.characterId || null }) },
-    { id: "party", label: "Party", icon: "👥", render: partyTab },
-    { id: "notes", label: "Journal", icon: "📓", render: notesTab },
-    { id: "rules", label: "Rules", icon: "📚", render: () => referencePanel({ isDM: false }) },
+    { id: "handouts", group: "campaign", label: "Handouts", icon: "📜", primary: !state.gmless, badge: () => unseen(), render: handoutsTab },
+    { id: "shops", group: "campaign", label: "Shops", icon: "🏪", badge: () => (state.shops || []).filter((x) => x.open).length, render: () => shopsPanel(state, { gm: !!state.gmless, myCharId: state.slots[state.me.slot]?.characterId || null }) },
+    { id: "party", group: "campaign", label: "Party", icon: "👥", render: partyTab },
+    { id: "notes", group: "campaign", label: "Journal", icon: "📓", render: notesTab },
+    { id: "rules", group: "reference", label: "Rules", icon: "📚", render: () => referencePanel({ isDM: false }) },
   ], { persistKey: `pftable.ptab.${session.code}`, onChange: (id) => { if (id === "play") { seenLog = state.log.length; logPanel.scrollDown(); } drawHeader(); tabset.updateBar(); } });
 
   function storyTab() {

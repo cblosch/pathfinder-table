@@ -14,6 +14,15 @@ export async function roll(formula, label, opts = {}) {
 }
 
 // Render a character sheet. `editable` lets the viewer change live state (HP etc).
+// "Bakuwa Lizardfolk", not "Bakuwa Lizardfolk Lizardfolk": the ancestry is
+// named once, unless the heritage name doesn't already include it.
+export function lineage(char) {
+  const her = char.heritage ? heritageName(char) : "";
+  const anc = char.ancestry || "";
+  if (!her) return anc;
+  return anc && !her.toLowerCase().includes(anc.toLowerCase()) ? `${her} ${anc}` : her;
+}
+
 export function renderSheet(char, { editable = false, onEdit, rollAs, compact = false } = {}) {
   const data = coreData();
   const comp = computeCharacter(char, data);
@@ -31,7 +40,7 @@ export function renderSheet(char, { editable = false, onEdit, rollAs, compact = 
     h("div", { class: "token-dot", style: { background: char.color || "#3b6ea5" } }, (char.name || "?")[0]),
     h("div", {},
       h("h2", {}, char.name || "Unnamed"),
-      h("p", { class: "muted" }, `Level ${char.level} ${char.heritage ? heritageName(char) + " " : ""}${char.ancestry} ${char.class}${char.subclass ? " (" + char.subclass + ")" : ""} · ${char.background}${char.deity ? " · " + char.deity : ""}`)),
+      h("p", { class: "muted" }, `Level ${char.level} ${lineage(char)} ${char.class}${char.subclass ? " (" + char.subclass + ")" : ""} · ${char.background}${char.deity ? " · " + char.deity : ""}`)),
     editable && onEdit ? h("button", { onclick: onEdit }, "Edit build") : null));
   if (char.heritage === "Custom" && char.customHeritage?.desc) root.append(h("p", { class: "hint" }, h("strong", {}, `${heritageName(char)}: `), char.customHeritage.desc));
 

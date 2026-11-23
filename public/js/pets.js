@@ -132,10 +132,10 @@ export function petsTab(state, { myCharId, act }) {
   const c = myCharId ? state.characters[myCharId] : null;
   if (!c) return h("div", { class: "empty" }, h("p", {}, "Save a character to see its pets here."));
   const pets = c.pets || [];
-  if (!pets.length) return h("div", { class: "empty" }, h("h3", {}, "No pets or companions"), h("p", {}, "Add a pet, familiar or animal companion in the character builder (Character tab, then Edit), in the Pets & companions section."));
+  if (!pets.length) return h("p", { class: "muted" }, "None yet. Add a pet, familiar or animal companion with Edit build, in the Pets & companions section.");
   const livePets = c.live?.pets || {};
   for (const pet of pets) {
-    box.append(h("section", { class: "bsec" }, petBlock(pet, c, {
+    box.append(h("div", { class: "pet-card" }, petBlock(pet, c, {
       live: livePets[pet.id],
       onHp: (hp) => act("updateCharacterState", { characterId: c.id, live: { pets: { ...livePets, [pet.id]: { ...(livePets[pet.id] || {}), hp } } } }).catch((e) => toast(e.message, "error")),
       roll: (mod, label) => act("roll", { formula: `1d20${mod >= 0 ? "+" : ""}${mod}`, label: `${pet.name || "Pet"}: ${label}`, as: pet.name || c.name }),

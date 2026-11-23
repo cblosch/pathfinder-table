@@ -372,17 +372,17 @@ export async function mountDM(app, { home } = {}) {
   const LIVE = new Set(["table", "notes", "party", "handouts", "maps", "shops"]);
   let tabset;
   const makeTabs = () => tabs([
-    { id: "table", label: "Table", icon: "🗺️", short: "Map", primary: true, render: tableTab },
-    { id: "play", label: "Initiative & chat", icon: "💬", short: "Play", primary: true, mobileOnly: true, badge: unreadLog, render: playTab },
-    { id: "party", label: "Seats & party", icon: "👥", short: "Party", primary: true, render: partyTab },
-    { id: "notes", label: "Notes", icon: "📝", primary: true, render: notesTab },
-    { id: "plot", label: "Plot", icon: "📖", render: () => plotEditor(state, { onSceneBrief: openBrief, onMapFor: mapForLocation, onReload: () => setTimeout(() => tabset.refresh(), 400) }) },
-    { id: "maps", label: "Maps", icon: "🧭", render: mapsTab },
-    { id: "handouts", label: "Handouts", icon: "📜", render: handoutsTab },
-    { id: "encounters", label: "Encounters", icon: "⚔️", short: "Fights", render: () => encounterBuilder(state, { getActiveMap: activeMap }) },
-    { id: "shops", label: "Shops", icon: "🏪", render: () => shopsPanel(state, { gm: true }) },
-    { id: "tools", label: "GM tools", icon: "🧰", render: toolsTab },
-    { id: "reference", label: "Rules", icon: "📚", render: () => referencePanel({ isDM: true }) },
+    { id: "table", group: "campaign", label: "Table", icon: "🗺️", short: "Map", primary: true, render: tableTab },
+    { id: "play", group: "campaign", label: "Initiative & chat", icon: "💬", short: "Play", primary: true, mobileOnly: true, badge: unreadLog, render: playTab },
+    { id: "party", group: "campaign", label: "Seats & party", icon: "👥", short: "Party", primary: true, render: partyTab },
+    { id: "notes", group: "campaign", label: "Notes", icon: "📝", primary: true, render: notesTab },
+    { id: "plot", group: "campaign", label: "Plot", icon: "📖", render: () => plotEditor(state, { onSceneBrief: openBrief, onMapFor: mapForLocation, onReload: () => setTimeout(() => tabset.refresh(), 400) }) },
+    { id: "maps", group: "campaign", label: "Maps", icon: "🧭", render: mapsTab },
+    { id: "handouts", group: "campaign", label: "Handouts", icon: "📜", render: handoutsTab },
+    { id: "encounters", group: "campaign", label: "Encounters", icon: "⚔️", short: "Fights", render: () => encounterBuilder(state, { getActiveMap: activeMap }) },
+    { id: "shops", group: "campaign", label: "Shops", icon: "🏪", render: () => shopsPanel(state, { gm: true }) },
+    { id: "tools", group: "campaign", label: "GM tools", icon: "🧰", render: toolsTab },
+    { id: "reference", group: "reference", label: "Rules", icon: "📚", render: () => referencePanel({ isDM: true }) },
   ], { persistKey: `pftable.dmtab.${session.code}`, onChange: (id) => { if (id === "play") { seenLog = state.log.length; logPanel.scrollDown(); tabset.updateBar(); } } });
 
   function playTab() {
