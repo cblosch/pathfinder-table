@@ -76,6 +76,7 @@ export function mountBuilder(container, initial, { onSave, onCancel, title = "Ch
   async function save() {
     const issues = validateCharacter(c, data);
     if (issues.length && !(await confirmDialog(`This character still has ${issues.length} open choice${issues.length > 1 ? "s" : ""}:\n\n• ${issues.slice(0, 8).join("\n• ")}\n\nSave anyway? You can finish it later with Edit build.`, { ok: "Save anyway", cancel: "Keep editing" }))) return;
+    try { c.vision = computeCharacter(c, data).vision || "normal"; } catch {}
     onSave && onSave(structuredClone(c));
   }
 

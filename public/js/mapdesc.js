@@ -68,12 +68,43 @@ export function planFromText(text, { fallbackType = "dungeon", name = "" } = {})
   // which way things lead: "houses leading north", "the altar at the west end", "northward"
   const dm = /\b(north|south|east|west)(ward|wards|ern)?\b/.exec(t);
   const direction = dm ? dm[1] : null;
+  // where things are: each clause's direction applies to the features named in it
+  const where = {};
+  const COURSE = /\b(north|south|east|west)(ern)?\w*[\s-]+(to|and|-|through)?[\s-]*(the )?(north|south|east|west)\w*|\b(flows?|runs?|running|flowing|winds?|winding|cuts?|cutting|crosses|crossing) (from )?(the )?(north|south|east|west)\w*([\s-]+(to|and|-|through)?[\s-]*(the )?(north|south|east|west)\w*)?/g;
+  for (const raw of t.split(/[.;,]|\b(?:and|with|while|where|but|then|which|beyond|past)\b/)) {
+    // a course ("running north to south") says which way something runs, not where it is
+    const clause = raw.replace(COURSE, " ");
+    const d = dirIn(clause);
+    if (!d) continue;
+    for (const f of Object.keys(FEATURES)) if (!where[f] && FEATURES[f].words.test(` ${raw} `)) where[f] = d;
+    if (!where.entrance && ENTRANCE.test(raw)) where.entrance = d;
+    if (!where.landmark && /\b(ziggurat|pyramid)\b/.test(raw)) where.landmark = d;
+  }
+  // a river's course: "running north to south", "east-west"
+  const riverAxis = /\b(north|south)(ern)?\w*[\s-]+(to|and|-|through)?[\s-]*(the )?(south|north)\b|\b(flows?|runs?|running|flowing) (north|south)/.test(t) ? "ns"
+    : /\b(east|west)(ern)?\w*[\s-]+(to|and|-|through)?[\s-]*(the )?(east|west)\b|\b(flows?|runs?|running|flowing) (east|west)/.test(t) ? "ew" : null;
   const bm = FEATURES.building.words.exec(t);
   const buildingNoun = bm ? bm[3] : null;
   const place = /\b(far (end|side|edge)|other (end|side)|across (the|from))\b/.test(t) ? "far" : /\b(middle|center|centre|heart)\b/.test(t) ? "center" : null;
   const buildingKinds = BUILDING_KINDS.filter(([, re]) => re.test(t)).map(([n]) => n);
-  return normalizePlan({ type, size, rooms, buildings, features, name, underground, layout, landmark, buildingKinds, direction, buildingNoun, place });
+  return normalizePlan({ type, size, rooms, buildings, features, name, underground, layout, landmark, buildingKinds, direction, buildingNoun, place, where, riverAxis });
 }
+
+// Directions, including diagonals and plain-language sides
+const DIR_WORDS = [
+  ["ne", /\b(north[- ]?east(ern)?|upper right|top right)\b/], ["nw", /\b(north[- ]?west(ern)?|upper left|top left)\b/],
+  ["se", /\b(south[- ]?east(ern)?|lower right|bottom right)\b/], ["sw", /\b(south[- ]?west(ern)?|lower left|bottom left)\b/],
+  ["n", /\b(north(ern|ward|wards)?|top|upper)\b/], ["s", /\b(south(ern|ward|wards)?|bottom|lower)\b/],
+  ["e", /\b(east(ern|ward|wards)?|right)\b/], ["w", /\b(west(ern|ward|wards)?|left)\b/],
+  ["c", /\b(middle|center|centre|heart|central)\b/],
+];
+function dirIn(text) {
+  let best = null, at = Infinity;
+  for (const [d, re] of DIR_WORDS) { const m = re.exec(text); if (m && m.index < at) { at = m.index; best = d; } }
+  return best;
+}
+const ENTRANCE = /\b(entrance|entry|entryway|gate|gates|gatehouse|mouth|doorway|front door|way in|approach|stairs? (up|down)|ladder (up|down))\b/;
+export const DIR_NAMES = { n: "north", s: "south", e: "east", w: "west", ne: "northeast", nw: "northwest", se: "southeast", sw: "southwest", c: "center" };
 
 // Building kinds a description can name (towns only label what's asked for)
 const BUILDING_KINDS = [
@@ -95,17 +126,21 @@ export function normalizePlan(p = {}) {
     buildingKinds: (p.buildingKinds || []).filter((k) => BUILDING_KINDS.some(([n]) => n === k)),
     direction: ["north", "south", "east", "west"].includes(p.direction) ? p.direction : null,
     buildingNoun: p.buildingNoun ? String(p.buildingNoun).slice(0, 20) : null, place: ["far", "center"].includes(p.place) ? p.place : null,
+    where: Object.fromEntries(Object.entries(p.where || {}).filter(([k, v]) => DIR_NAMES[v] && (FEATURES[k] || k === "entrance" || k === "landmark"))),
+    riverAxis: ["ns", "ew"].includes(p.riverAxis) ? p.riverAxis : null,
   };
 }
 
 export function describePlan(p) {
   const bits = [(p.underground ? "Underground " : "") + MAP_TYPES[p.type].replace(/^./, (c) => (p.underground ? c.toLowerCase() : c)), `${p.size} size`];
   if (p.layout === "strip") bits.push(`one long street${p.direction ? ` leading ${p.direction}` : ""}`);
-  if (p.landmark) bits.push(`${p.landmark}${p.layout === "strip" ? " at the end" : " in the center"}`);
+  if (p.landmark) bits.push(`${p.landmark}${p.layout === "strip" ? " at the end" : p.where?.landmark ? ` (${DIR_NAMES[p.where.landmark]})` : " in the center"}`);
   if (p.type === "town") bits.push(p.buildingKinds.length ? `buildings: ${["houses", ...p.buildingKinds.map((k) => k.toLowerCase())].join(", ")}` : "houses");
   if (p.rooms) bits.push(`${p.rooms} room${p.rooms > 1 ? "s" : ""}`);
   if (p.buildings) bits.push(`${p.buildings} buildings`);
-  if (p.features.length) bits.push(p.features.map((f) => (f === "building" && p.buildingNoun ? `a ${p.buildingNoun}${p.place === "far" ? ` at the ${p.direction ? p.direction + "ern" : "far"} end` : p.place === "center" ? " in the middle" : ""}` : FEATURES[f].label)).join(", "));
+  const at = (k) => (p.where?.[k] ? ` (${DIR_NAMES[p.where[k]]})` : "");
+  if (p.features.length) bits.push(p.features.map((f) => (f === "building" && p.buildingNoun ? `a ${p.buildingNoun}${p.where?.building ? ` (${DIR_NAMES[p.where.building]})` : p.place === "far" ? ` at the ${p.direction ? p.direction + "ern" : "far"} end` : p.place === "center" ? " in the middle" : ""}` : f === "river" && p.riverAxis ? `river running ${p.riverAxis === "ns" ? "north-south" : "east-west"}${at("river")}` : FEATURES[f].label + at(f))).join(", "));
+  if (p.where?.entrance) bits.push(`entrance on the ${DIR_NAMES[p.where.entrance]} side`);
   return bits.join(" · ");
 }
 
@@ -125,6 +160,9 @@ export function mapFromPlan(plan, seed = Math.floor(Math.random() * 1e9)) {
   let m = p.type === "town" ? buildTown(p, seed, r) : generateMap(p.type, seed, opts);
   // a street is built running east; turn it to lead the way the description says
   if (p.type === "town" && p.layout === "strip" && p.direction && p.direction !== "east") m = orient(m, p.direction);
+  // an inn or shop is built with its front door and street to the south; turn it to face the named side
+  const face = p.where?.entrance;
+  if (p.type === "tavern" && face && face !== "c") m = orient(m, DIR_NAMES[face[0]], "south");
   applyFeatures(m, p, r);
   m.plan = p;
   return m;
@@ -165,6 +203,31 @@ function applyFeatures(m, p, r) {
     return [i % W, Math.floor(i / W)];
   };
 
+  // ---- placing things by direction ----
+  const where = p.where || {};
+  const aim = (d) => [d.includes("e") ? Math.round(W * 0.85) : d.includes("w") ? Math.round(W * 0.15) : W >> 1, d.includes("n") ? Math.round(H * 0.15) : d.includes("s") ? Math.round(H * 0.85) : H >> 1];
+  const nearestOpen = ([px, py], ok = (v) => FLOORS.includes(v)) => {
+    let best = null, bd = Infinity;
+    for (let i = 0; i < c.length; i++) { if (!ok(c[i])) continue; const d = Math.hypot((i % W) - px, Math.floor(i / W) - py); if (d < bd) { bd = d; best = i; } }
+    return best === null ? [px, py] : [best % W, Math.floor(best / W)];
+  };
+  const roomNear = ([px, py]) => {
+    const free = rooms.filter((rm) => !usedRooms.has(rm));
+    const pool = free.length ? free : rooms;
+    if (!pool.length) return null;
+    const rm = pool.reduce((a, b) => (Math.hypot(a.x + a.w / 2 - px, a.y + a.h / 2 - py) <= Math.hypot(b.x + b.w / 2 - px, b.y + b.h / 2 - py) ? a : b));
+    usedRooms.add(rm);
+    return rm;
+  };
+  // where a feature goes: toward its named side, else the usual spot
+  const placeAt = (f, fallback) => {
+    const d = where[f];
+    if (!d) return fallback();
+    const pt = aim(d);
+    if (rooms.length && !outdoors) { const rm = roomNear(pt); if (rm) return [rm.x + (rm.w >> 1), rm.y + (rm.h >> 1)]; }
+    return nearestOpen(pt);
+  };
+
   // ground cover
   if (outdoors && (has("swamp") || has("sand") || has("denseTrees") || has("openGround"))) {
     for (let i = 0; i < c.length; i++) {
@@ -177,7 +240,7 @@ function applyFeatures(m, p, r) {
   }
   if (p.type === "wilderness") {
     // the base generator adds a river and a road; keep them only if asked for
-    if (!has("river") && !has("bridge")) for (let i = 0; i < c.length; i++) { if (c[i] === "~" || c[i] === "w") c[i] = ","; if (c[i] === "b") c[i] = "="; }
+    for (let i = 0; i < c.length; i++) { if (c[i] === "~" || c[i] === "w") c[i] = ","; if (c[i] === "b") c[i] = "="; }
     if (!has("road") || has("noRoad")) for (let i = 0; i < c.length; i++) if (c[i] === "=") c[i] = ",";
     if (!has("openGround")) m.labels = m.labels.filter((l) => l.text !== "clearing");
     if (has("sand") || has("oasis")) for (let i = 0; i < c.length; i++) if (c[i] === "," || c[i] === "f" || (c[i] === "T" && r() < 0.9)) c[i] = r() < 0.06 ? "^" : "s";
@@ -185,9 +248,12 @@ function applyFeatures(m, p, r) {
 
   // water: a river crossing the map, or a lake
   const riverCells = [];
-  if (has("river") && !(p.type === "wilderness" && m.cells.includes("~"))) {
-    const vertical = r() < 0.5;
-    let pos = ri(Math.floor((vertical ? W : H) * 0.3), Math.floor((vertical ? W : H) * 0.7));
+  if (has("river") || (has("bridge") && p.type === "wilderness")) {
+    // course: as described ("north to south"), along a named side, or either way
+    const d = where.river;
+    const axis = p.riverAxis || (d && /^[ns]$/.test(d) ? "ew" : d && /^[ew]$/.test(d) ? "ns" : r() < 0.5 ? "ns" : "ew");
+    const vertical = axis === "ns";
+    let pos = d && d !== "c" ? (vertical ? aim(d)[0] : aim(d)[1]) : ri(Math.floor((vertical ? W : H) * 0.3), Math.floor((vertical ? W : H) * 0.7));
     for (let t = 0; t < (vertical ? H : W); t++) {
       pos += ri(-1, 1);
       for (let d = -2; d <= 2; d++) {
@@ -202,7 +268,7 @@ function applyFeatures(m, p, r) {
   }
   if (has("oasis")) {
     // a spring-fed pool ringed with palms and grass, in sand
-    const [cx, cy] = p.place === "far" ? [W >> 1, H >> 1] : center();
+    const [cx, cy] = placeAt("oasis", () => center());
     for (let y = cy - 6; y <= cy + 6; y++) for (let x = cx - 8; x <= cx + 8; x++) {
       const d = Math.hypot((x - cx) / 1.35, y - cy);
       if (get(x, y) === " " || get(x, y) === "#") continue;
@@ -211,7 +277,7 @@ function applyFeatures(m, p, r) {
     label(cx - 1, cy, "Oasis", true);
   }
   if (has("lake") && !has("oasis")) {
-    const [cx, cy] = has("altar") || has("statue") || has("pillars") ? spot() : center();
+    const [cx, cy] = placeAt("lake", () => (has("altar") || has("statue") || has("pillars") ? spot() : center()));
     const rad = p.size === "large" ? 5 : p.size === "small" ? 2 : 3;
     let wet = 0;
     for (let y = cy - rad - 1; y <= cy + rad + 1; y++) for (let x = cx - rad - 2; x <= cx + rad + 2; x++) {
@@ -225,7 +291,8 @@ function applyFeatures(m, p, r) {
   if (has("bridge")) {
     const water = c.map((v, i) => (v === "~" ? i : -1)).filter((i) => i >= 0);
     if (water.length) {
-      const i = water[Math.floor(water.length / 2)];
+      const near = where.bridge ? aim(where.bridge) : null;
+      const i = near ? water.reduce((a, b) => (Math.hypot(a % W - near[0], Math.floor(a / W) - near[1]) <= Math.hypot(b % W - near[0], Math.floor(b / W) - near[1]) ? a : b)) : water[Math.floor(water.length / 2)];
       const x0 = i % W, y0 = Math.floor(i / W);
       const horizontalRun = get(x0 - 1, y0) !== "~" || get(x0 + 1, y0) !== "~" ? false : true;
       for (let k = -4; k <= 4; k++) {
@@ -236,7 +303,7 @@ function applyFeatures(m, p, r) {
     }
   }
   if (has("chasm")) {
-    const [cx0, cy0] = has("altar") || has("statue") || has("pillars") ? spot() : center();
+    const [cx0, cy0] = placeAt("chasm", () => (has("altar") || has("statue") || has("pillars") ? spot() : center()));
     const cx = Math.max(3, Math.min(W - 4, cx0)), cy = Math.max(3, Math.min(H - 4, cy0));
     let x = cx - ri(4, 8), y = cy;
     for (let k = 0; k < (p.size === "large" ? 18 : 11); k++) {
@@ -248,20 +315,23 @@ function applyFeatures(m, p, r) {
 
   // set pieces in the main room / central spot
   if (has("pillars")) {
-    const rm = big || { x: 2, y: 2, w: W - 4, h: H - 4 };
+    const rm = (where.pillars && rooms.length ? roomNear(aim(where.pillars)) : big) || { x: 2, y: 2, w: W - 4, h: H - 4 };
     for (let x = rm.x + 1; x < rm.x + rm.w - 1; x += 2) for (const y of [rm.y + 1, rm.y + rm.h - 2]) if (FLOORS.includes(get(x, y))) set(x, y, "p");
   }
-  if (has("altar") && !m.altarPlaced) { const [x, y] = center(); set(x, y, "t"); set(x + 1, y, "t"); label(x, y - 1, "Altar"); }
-  if (has("statue")) { const [x0, y0] = center(); const x = x0 + (has("altar") ? 3 : 0), y = y0; if (FLOORS.includes(get(x, y))) { set(x, y, "p"); label(x, y + 1, "Statue"); } }
+  if (has("altar") && !m.altarPlaced) { const [x, y] = placeAt("altar", center); set(x, y, "t"); set(x + 1, y, "t"); label(x, y - 1, "Altar"); }
+  if (has("statue")) { const [x0, y0] = where.statue ? placeAt("statue", center) : center(); const x = x0 + (has("altar") && !where.statue ? 3 : 0), y = y0; if (FLOORS.includes(get(x, y))) { set(x, y, "p"); label(x, y + 1, "Statue"); } }
   if (has("camp")) {
-    const [x, y] = outdoors ? center() : center();
+    const [x, y] = placeAt("camp", center);
     for (let j = -2; j <= 2; j++) for (let i = -3; i <= 3; i++) if (Math.hypot(i / 1.4, j) < 2.6 && "Tf,".includes(get(x + i, y + j))) set(x + i, y + j, outdoors ? "s" : get(x + i, y + j));
     set(x, y, "t"); label(x, y, "Campfire");
     for (const [dx, dy] of [[-3, -2], [3, -2], [-3, 2], [3, 2]]) if (FLOORS.includes(get(x + dx, y + dy))) set(x + dx, y + dy, "t");
   }
   if (has("ruins") && outdoors) {
     for (let k = 0; k < (p.size === "large" ? 4 : 2); k++) {
-      const bx = ri(3, W - 10), by = ri(3, H - 8), bw = ri(5, 8), bh = ri(4, 6);
+      const near = where.ruins ? aim(where.ruins) : null;
+      const bw = ri(5, 8), bh = ri(4, 6);
+      const bx = near ? Math.max(2, Math.min(W - bw - 2, near[0] - (bw >> 1) + ri(-6, 6))) : ri(3, W - 10);
+      const by = near ? Math.max(2, Math.min(H - bh - 2, near[1] - (bh >> 1) + ri(-4, 4))) : ri(3, H - 8);
       for (let y = by; y < by + bh; y++) for (let x = bx; x < bx + bw; x++) {
         const edge = x === bx || y === by || x === bx + bw - 1 || y === by + bh - 1;
         if (edge && r() < 0.65 && get(x, y) !== "~") set(x, y, "#");
@@ -285,23 +355,53 @@ function applyFeatures(m, p, r) {
   if (has("building") && p.type !== "town") {
     // one small building: at the far end (or the named side), in the middle, or somewhere open
     const bw = 5, bh = 4;
-    const side = p.direction || "east";
+    const d = where.building || (p.place === "far" ? (p.direction ? p.direction[0] : "e") : p.place === "center" ? "c" : null);
     let bx, by;
-    if (p.place === "far" || p.direction) {
-      bx = side === "east" ? W - bw - 3 : side === "west" ? 2 : (W - bw) >> 1;
-      by = side === "north" ? 2 : side === "south" ? H - bh - 3 : (H - bh) >> 1;
-    } else if (p.place === "center") { bx = (W - bw) >> 1; by = (H - bh) >> 1; }
-    else { bx = ri(3, W - bw - 3); by = ri(3, H - bh - 3); }
+    if (d) {
+      bx = d.includes("e") ? W - bw - 3 : d.includes("w") ? 2 : (W - bw) >> 1;
+      by = d.includes("n") ? 2 : d.includes("s") ? H - bh - 3 : (H - bh) >> 1;
+    } else { bx = ri(3, W - bw - 3); by = ri(3, H - bh - 3); }
     const floor = p.type === "cave" ? "c" : p.type === "dungeon" ? "." : "b";
     for (let y = by - 1; y <= by + bh; y++) for (let x = bx - 1; x <= bx + bw; x++) if (outdoors || FLOORS.includes(get(x, y))) set(x, y, outdoors ? (has("sand") || has("oasis") ? "s" : ",") : get(x, y));
     for (let y = by; y < by + bh; y++) for (let x = bx; x < bx + bw; x++) set(x, y, x === bx || y === by || x === bx + bw - 1 || y === by + bh - 1 ? (has("ramshackle") && r() < 0.15 ? "^" : "#") : floor);
     // the door faces the middle of the map
-    const [dx, dy] = side === "east" && (p.place === "far" || p.direction) ? [bx, by + 1 + ri(0, bh - 3)] : side === "west" && p.direction ? [bx + bw - 1, by + 1] : side === "north" && p.direction ? [bx + 2, by + bh - 1] : side === "south" && p.direction ? [bx + 2, by] : [bx + 2, by + bh - 1];
+    const ddx = W / 2 - (bx + bw / 2), ddy = H / 2 - (by + bh / 2);
+    const [dx, dy] = Math.abs(ddx) > Math.abs(ddy) ? (ddx > 0 ? [bx + bw - 1, by + (bh >> 1)] : [bx, by + (bh >> 1)]) : (ddy > 0 ? [bx + (bw >> 1), by + bh - 1] : [bx + (bw >> 1), by]);
     set(dx, dy, "+");
     const noun = p.buildingNoun || "building";
     label(bx + 1, by + 1, noun[0].toUpperCase() + noun.slice(1), true);
   }
-  if (has("stairs") && !c.includes("S")) { const open = floorIdx(); if (open.length) { const i = open[ri(0, open.length - 1)]; c[i] = "S"; label(i % W, Math.floor(i / W), "Stairs"); } }
+  if (has("stairs") && (where.stairs || !c.includes("S"))) {
+    const [x, y] = placeAt("stairs", () => { const open = floorIdx(); const i = open.length ? open[ri(0, open.length - 1)] : (H >> 1) * W + (W >> 1); return [i % W, Math.floor(i / W)]; });
+    set(x, y, "S"); label(x, y, "Stairs");
+  }
+
+  // an entrance cut in from the named edge
+  if (where.entrance && where.entrance !== "c" && p.type !== "tavern") {
+    const d = where.entrance;
+    const edge = [d.includes("e") ? W - 1 : d.includes("w") ? 0 : W >> 1, d.includes("n") ? 0 : d.includes("s") ? H - 1 : H >> 1];
+    // start inside: at the nearest corridor or room for built places, from the roads or the middle outdoors
+    let [x, y] = outdoors
+      ? (c.includes("=") ? nearestOpen([(edge[0] + (W >> 1)) >> 1, (edge[1] + (H >> 1)) >> 1], (v) => v === "=" || v === ".") : [W >> 1, H >> 1])
+      : nearestOpen(edge, (v) => FLOORS.includes(v) && v !== "w");
+    // head straight for the named edge (for a corner, the nearer of its two edges)
+    const toE = d.includes("e") ? W - 1 - x : d.includes("w") ? x : Infinity, toN = d.includes("n") ? y : d.includes("s") ? H - 1 - y : Infinity;
+    const horiz = toE <= toN;
+    const stepX = horiz ? (d.includes("e") ? 1 : -1) : 0, stepY = horiz ? 0 : (d.includes("s") ? 1 : -1);
+    const floor = p.type === "cave" ? "c" : p.type === "dungeon" ? "." : "=";
+    const wall = p.type === "dungeon" ? "#" : null;
+    while (x >= 0 && y >= 0 && x < W && y < H) {
+      for (const k of p.type === "dungeon" ? [0] : [0, 1]) {
+        const cx = x + (horiz ? 0 : k), cy = y + (horiz ? k : 0);
+        if (!"+S".includes(get(cx, cy))) set(cx, cy, floor);
+      }
+      if (wall) for (const k of [-1, 1]) { const wx = x + (horiz ? 0 : k), wy = y + (horiz ? k : 0); if (get(wx, wy) === " ") set(wx, wy, wall); }
+      x += stepX; y += stepY;
+    }
+    const ex = Math.max(0, Math.min(W - 1, x - stepX)), ey = Math.max(0, Math.min(H - 1, y - stepY));
+    if (p.type === "dungeon") set(ex, ey, "S");
+    label(Math.max(0, Math.min(W - 6, ex)), Math.max(0, Math.min(H - 1, ey)), p.type === "dungeon" ? "Entrance" : p.type === "cave" ? "Cave mouth" : p.type === "town" ? "Gate" : "Way in", true);
+  }
 
   m.cells = c.join("");
   m.fog = "0".repeat(W * H);
@@ -386,7 +486,11 @@ function buildTown(p, seed, r) {
         if (d < 0.92 + (r() - 0.5) * 0.12) set(x, y, "c");
       }
     }
-    const cx = W >> 1, cy = H >> 1;
+    // the plaza (and any landmark on it) sits toward its named side
+    const ld = p.where?.landmark;
+    const half = ((p.landmark ? zigSize : 6) + 4) >> 1;
+    const cx = ld ? Math.max(half + 2, Math.min(W - half - 3, ld.includes("e") ? Math.round(W * 0.75) : ld.includes("w") ? Math.round(W * 0.25) : W >> 1)) : W >> 1;
+    const cy = ld ? Math.max(half + 2, Math.min(H - half - 3, ld.includes("n") ? Math.round(H * 0.28) : ld.includes("s") ? Math.round(H * 0.72) : H >> 1)) : H >> 1;
     rect(3, cy - 1, W - 6, 2, "="); rect(cx - 1, 3, 2, H - 6, "=");
     const plaza = (p.landmark ? zigSize : 6) + 4;
     rect(cx - (plaza >> 1), cy - (plaza >> 1), plaza, plaza, ".");
@@ -430,17 +534,22 @@ function buildTown(p, seed, r) {
   }
 }
 
-// Turn a map built facing east so its far end faces north, south or west.
-function orient(m, dir) {
-  const W = m.w, H = m.h;
-  const [nw, nh] = dir === "west" ? [W, H] : [H, W];
-  const to = dir === "north" ? (x, y) => [y, W - 1 - x] : dir === "south" ? (x, y) => [H - 1 - y, x] : (x, y) => [W - 1 - x, y];
+// Turn a map built facing one way (its far end or front door toward `from`)
+// so that it faces `to`. Quarter turns clockwise: east → south → west → north.
+const COMPASS = ["east", "south", "west", "north"];
+function orient(m, to, from = "east") {
+  let turns = (COMPASS.indexOf(to) - COMPASS.indexOf(from) + 4) % 4;
+  while (turns-- > 0) m = turnClockwise(m);
+  return m;
+}
+function turnClockwise(m) {
+  const W = m.w, H = m.h, nw = H, nh = W;
+  const to = (x, y) => [H - 1 - y, x];
   const cells = new Array(nw * nh);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const [nx, ny] = to(x, y); cells[ny * nw + nx] = m.cells[y * W + x]; }
   const rect = (r) => {
     const a = to(r.x, r.y), b = to(r.x + r.w - 1, r.y + r.h - 1);
-    const x = Math.min(a[0], b[0]), y = Math.min(a[1], b[1]);
-    return { ...r, x, y, w: Math.abs(a[0] - b[0]) + 1, h: Math.abs(a[1] - b[1]) + 1 };
+    return { ...r, x: Math.min(a[0], b[0]), y: Math.min(a[1], b[1]), w: Math.abs(a[0] - b[0]) + 1, h: Math.abs(a[1] - b[1]) + 1 };
   };
   const rooms = (m.rooms || []).map(rect);
   // labels sit in the top-left corner of whatever they name

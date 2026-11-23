@@ -1,7 +1,7 @@
 // Game state and rules for one table. Runs on the Node server, or in the GM's
 // browser when the app is hosted without a server (see cloud.js).
 import { rollDice, degreeOfSuccess, DEGREES } from "./dice.js";
-import { visibleFrom, footprintClear, canReach, AMBIENT } from "./vision.js";
+import { visibleFrom, footprintClear, canReach, AMBIENT, partySight } from "./vision.js";
 import { startingGold } from "./rules.js";
 
 export const MAX_PLAYERS = 6;
@@ -246,6 +246,7 @@ export function applyAction(game, auth, type, p = {}) {
       m.lights ||= [];
       if (p.op === "add") m.lights.push({ id: id(), x: p.x | 0, y: p.y | 0, r: Math.max(1, Math.min(24, p.r | 0 || 4)) });
       if (p.op === "remove") m.lights = m.lights.filter((l) => l.id !== p.id);
+      revealAround(m, game);
       return;
     }
     case "deleteMap": dmOnly(); game.maps = game.maps.filter((m) => m.id !== p.id); if (game.activeMapId === p.id) game.activeMapId = game.maps[0]?.id || null; return;
@@ -279,7 +280,7 @@ export function applyAction(game, auth, type, p = {}) {
         }
         t.x = to.x;
         t.y = to.y;
-        if (game.autoReveal && (t.kind === "pc" || t.kind === "ally")) revealAround(m);
+        if (t.kind === "pc" || t.kind === "ally") revealAround(m, game);
         return;
       }
       if (p.op === "light") {
@@ -288,6 +289,7 @@ export function applyAction(game, auth, type, p = {}) {
         if (!t) return;
         if (!gm && t.slot !== auth.slot) throw new Error("You can only light your own token.");
         t.light = Math.max(0, Math.min(24, p.light | 0));
+        revealAround(m, game);
         return;
       }
       dmOnly();
@@ -379,7 +381,7 @@ export function applyAction(game, auth, type, p = {}) {
         if (i === undefined) break;
         m.tokens.push({ id: id(), x: i % m.w, y: Math.floor(i / m.w), label: str(c.name, 2), color: c.color || "#3b6ea5", kind: s.type === "companion" ? "ally" : "pc", slot: s.index, hidden: false, size: 1 });
       }
-      revealAround(m);
+      revealAround(m, game);
       return;
     }
     case "spawnEncounter": {
@@ -547,11 +549,14 @@ function openCells(m) {
   return out;
 }
 
-function revealAround(m) {
+// What the party's tokens can see (line of sight, light, darkvision) becomes
+// explored. The GM can still hide squares again by hand.
+function revealAround(m, game) {
   const f = m.fog.split("");
-  for (const t of m.tokens) {
-    if (t.kind !== "pc" && t.kind !== "ally") continue;
-    for (const i of visibleFrom(m, t.x, t.y, 10)) f[i] = "1";
-  }
+  const visionOf = (t) => {
+    const slot = game?.slots?.[t.slot];
+    return (slot?.characterId && game.characters[slot.characterId]?.vision) || "normal";
+  };
+  for (const i of partySight(m, visionOf)) f[i] = "1";
   m.fog = f.join("");
 }

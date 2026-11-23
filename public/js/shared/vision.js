@@ -7,22 +7,29 @@ export const pf2Distance = (dx, dy) => {
 
 const blocksSight = (ch) => ch === "#" || ch === " " || ch === "T" || ch === "p" || ch === "+" || ch === "r";
 
+// Permissive line of sight: a square is visible if a clear line runs from the
+// viewer's square to its center or to any of its corners. A pillar hides what
+// is directly behind it, not everything in its general direction.
 export function visibleFrom(map, ox, oy, radius) {
   const out = new Set();
-  for (let y = oy - radius; y <= oy + radius; y++) for (let x = ox - radius; x <= ox + radius; x++) {
-    if (x < 0 || y < 0 || x >= map.w || y >= map.h) continue;
-    if (Math.hypot(x - ox, y - oy) > radius + 0.5) continue;
-    // Bresenham line, stop at the first blocker (the blocker itself is visible)
-    let x0 = ox, y0 = oy, ok = true;
-    const dx = Math.abs(x - x0), dy = -Math.abs(y - y0), sx = x0 < x ? 1 : -1, sy = y0 < y ? 1 : -1;
-    let err = dx + dy;
-    while (!(x0 === x && y0 === y)) {
-      if (!(x0 === ox && y0 === oy) && blocksSight(map.cells[y0 * map.w + x0])) { ok = false; break; }
-      const e2 = 2 * err;
-      if (e2 >= dy) { err += dy; x0 += sx; }
-      if (e2 <= dx) { err += dx; y0 += sy; }
+  const W = map.w, H = map.h;
+  const blocked = (x, y) => blocksSight(map.cells[y * W + x]);
+  const clear = (tx, ty, px, py) => {
+    // walk from the viewer's center to (px, py) in small steps; any blocker on the way (other than the target square) stops it
+    const sx = ox + 0.5, sy = oy + 0.5, dx = px - sx, dy = py - sy;
+    const n = Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) * 3);
+    for (let k = 1; k < n; k++) {
+      const x = Math.floor(sx + (dx * k) / n), y = Math.floor(sy + (dy * k) / n);
+      if ((x === ox && y === oy) || (x === tx && y === ty)) continue;
+      if (blocked(x, y)) return false;
     }
-    if (ok) out.add(y * map.w + x);
+    return true;
+  };
+  for (let y = Math.max(0, oy - radius); y <= Math.min(H - 1, oy + radius); y++) for (let x = Math.max(0, ox - radius); x <= Math.min(W - 1, ox + radius); x++) {
+    if (Math.hypot(x - ox, y - oy) > radius + 0.5) continue;
+    if (x === ox && y === oy) { out.add(y * W + x); continue; }
+    const pts = [[x + 0.5, y + 0.5], [x + 0.05, y + 0.05], [x + 0.95, y + 0.05], [x + 0.05, y + 0.95], [x + 0.95, y + 0.95]];
+    if (pts.some(([px, py]) => clear(x, y, px, py))) out.add(y * W + x);
   }
   return out;
 }

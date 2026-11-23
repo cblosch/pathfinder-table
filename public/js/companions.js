@@ -172,6 +172,7 @@ export async function autoBuild({ level = 1, className = null, name = null } = {
   c.equipment.budget = worth + coins <= lump ? null : worth + coins;
   c.equipment.gold = Math.round(((c.equipment.budget ?? lump) - worth) * 100) / 100;
   c.name = name || `${pick(NAMES[ancTrait] || NAMES.human)}`;
+  try { c.vision = computeCharacter(c, data).vision || "normal"; } catch {}
   c.color = pick(["#3b6ea5", "#4c8c4a", "#8a5a9e", "#b07a2a", "#2f8f8f", "#a33b2b"]);
   return c;
 }
