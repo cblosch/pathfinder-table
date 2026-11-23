@@ -108,26 +108,26 @@ async function landing(error) {
           h("button", { class: "link strong", onclick: () => go(g.role === "gm" ? "gm" : "play", g.code, {}) }, `${g.name || "Untitled"} `, h("span", { class: "code" }, g.code)),
           h("span", { class: "tag" }, g.role === "gm" ? "GM" : g.gmless ? "Player · no GM" : "Player"),
           h("span", { class: "spacer" }),
-          h("button", { class: "small", onclick: (e) => removeGame(g, e.target.closest("li")) }, "Remove"))))));
+          h("button", { class: "small", onclick: (e) => removeGame(g, e.target.closest("li")) }, "Delete"))))));
     }
   } catch {}
 }
 
-// Remove a game from "Your games" (and, for its GM, optionally delete it for everyone).
-function removeGame(g, row) {
-  const drop = async (fn, done) => {
-    const parent = row.parentNode, next = row.nextSibling;
-    row.remove();
-    if (parent && !parent.children.length) parent.closest(".recent")?.remove();
-    try { await fn(g.code); toast(done); }
-    catch (err) { parent?.insertBefore(row, next); toast(`Couldn't remove it: ${err.message}`, "error"); }
-  };
-  const items = [{ icon: "📕", label: "Remove from my list", onClick: () => drop(forget, `${g.name || g.code} removed from your list`) }];
-  if (g.role === "gm") items.push({ icon: "🗑", label: "Delete the game for everyone", onClick: async () => {
-    if (await confirmDialog(`Delete “${g.name || g.code}” for everyone? Its plot, maps, handouts and seats are gone for good, and players can no longer open it.`, { ok: "Delete game", danger: true }))
-      drop(deleteGame, `${g.name || g.code} deleted`);
-  } });
-  actionSheet(g.name || g.code, items);
+// One "Delete the game" action. A GM's game is deleted for everyone; a player
+// can't delete the others' game, so for them it leaves their list.
+async function removeGame(g, row) {
+  const name = g.name || g.code;
+  const isGM = g.role === "gm";
+  const ok = await confirmDialog(isGM
+    ? `Delete “${name}”? Its plot, maps, handouts and seats are gone for good, and players can no longer open it.`
+    : `Delete “${name}” from your games? The game itself carries on for the others; you can rejoin with its code.`,
+  { ok: "Delete the game", danger: true });
+  if (!ok) return;
+  const parent = row.parentNode, next = row.nextSibling;
+  row.remove();
+  if (parent && !parent.children.length) parent.closest(".recent")?.remove();
+  try { await (isGM ? deleteGame : forget)(g.code); toast(`${name} deleted`); }
+  catch (err) { parent?.insertBefore(row, next); toast(`Couldn't delete it: ${err.message}`, "error"); }
 }
 
 async function joinScreen(code) {

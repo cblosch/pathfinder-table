@@ -1,0 +1,18 @@
+# Render blueprint: New > Blueprint, pick this repository.
+# The persistent disk keeps games across restarts and deploys (disks need a
+# paid instance; on the free plan games are lost whenever the service restarts).
+services:
+  - type: web
+    name: pathfinder-table
+    runtime: docker
+    plan: starter
+    healthCheckPath: /
+    envVars:
+      - key: PF_TABLE_DATA
+        value: /data/games
+      - key: ANTHROPIC_API_KEY
+        sync: false
+    disk:
+      name: games
+      mountPath: /data
+      sizeGB: 1

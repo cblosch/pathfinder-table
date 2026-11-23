@@ -22,6 +22,7 @@ export const TERRAIN = {
   "r": { name: "Boulder", color: "#6d6962", block: true },
   "p": { name: "Pillar", color: "#5d5750", block: true },
   "t": { name: "Table / furniture (cover)", color: "#6e4a2a" },
+  "v": { name: "Chasm / pit", color: "#0d0b0a", block: true },
   "?": { name: "Unexplored", color: "#000", block: true },
 };
 

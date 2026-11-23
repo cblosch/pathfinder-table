@@ -120,6 +120,7 @@ export function tabs(defs, { onChange, initial, persistKey, hoist } = {}) {
     current = id;
     try { persistKey && localStorage.setItem(persistKey, id); } catch {}
     render();
+    body.scrollTop = 0;
     window.scrollTo(0, 0);
     onChange && onChange(id);
   };

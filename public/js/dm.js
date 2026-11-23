@@ -1,4 +1,5 @@
 import { h, clear, cap, tabs, toast, modal, field, select, copyText, debounce, isMobile, onLayoutChange, actionSheet, confirmDialog, promptDialog, formDialog, MODE, groupedSelect, classGroups, themeToggle } from "./ui.js";
+import { planFromText, normalizePlan, mapFromPlan, describePlan } from "./mapdesc.js";
 import { shopsPanel } from "./shops.js";
 import { act, connect, session, askAI, config, shareInfo, exportGame, canPrint, isArtifact } from "./transport.js";
 import { coreData, load } from "./data.js";
@@ -32,7 +33,7 @@ export async function mountDM(app, { home } = {}) {
   onLayoutChange(placePanels);
   let seenLog = 0;
   const unreadLog = () => (isMobile() && tabset?.current !== "play" && state ? Math.min(99, state.log.length - seenLog) : 0);
-  const keepScroll = (fn) => { const y = window.scrollY, m = main.scrollTop; fn(); main.scrollTop = m; window.scrollTo(0, y); };
+  const keepScroll = (fn) => { const y = window.scrollY, m = main.scrollTop, tb = main.querySelector(".tab-body"), t = tb?.scrollTop || 0; fn(); main.scrollTop = m; if (tb) tb.scrollTop = t; window.scrollTo(0, y); };
 
   // ---------------- persistent map view ----------------
   const savePaint = debounce((m) => act("saveMap", { map: m }).catch((e) => toast(e.message, "error")), 600);
@@ -158,6 +159,35 @@ export async function mountDM(app, { home } = {}) {
       seedInput.value = current.seed;
     };
     const seedInput = h("input", { placeholder: "random", style: { width: "8em" }, onchange: (e) => (seed = e.target.value) });
+    // ---- from a description ----
+    const desc = h("textarea", { id: "map-desc", rows: 3, placeholder: "e.g. A flooded crypt with pillars, an altar and a collapsed stair down. Large." });
+    const understood = h("p", { class: "hint" });
+    let plan = null;
+    const build = (p) => {
+      plan = p;
+      current = mapFromPlan(p);
+      if (name) current.name = name;
+      preview.setMap(current);
+      seedInput.value = current.seed;
+      clear(understood).append(h("strong", {}, "Understood as: "), describePlan(p));
+    };
+    box.append(h("section", { class: "bsec" }, h("h3", {}, "Describe a map"),
+      h("p", { class: "hint" }, "Say what the place is and what's in it: the kind of place, its size, how many rooms or buildings, and features such as a river, lake, bridge, chasm, pillars, altar, statue, camp, ruins, rubble, stairs or furniture."),
+      desc,
+      h("div", { class: "row wrap" },
+        h("button", { class: "primary", onclick: () => desc.value.trim() && build(planFromText(desc.value, { name })) }, "Build from description"),
+        ai ? h("button", { onclick: async (e) => {
+          if (!desc.value.trim()) return;
+          e.target.disabled = true; e.target.textContent = "Reading…";
+          try {
+            const r = await ai("map", desc.value.trim());
+            const m = r.text.match(/\{[\s\S]*\}/);
+            build(normalizePlan({ ...JSON.parse(m ? m[0] : r.text), name }));
+          } catch (err) { toast("The AI's reading couldn't be used; built from keywords instead.", "error"); build(planFromText(desc.value, { name })); }
+          e.target.disabled = false; e.target.textContent = "✨ Read it with AI";
+        } }, "✨ Read it with AI") : null,
+        h("button", { onclick: () => plan && build(plan) }, "🎲 Another take")),
+      understood));
     box.append(h("section", { class: "bsec" }, h("h3", {}, "Generate a map"),
       h("div", { class: "row wrap" },
         field("Type", select(Object.entries(MAP_TYPES).map(([value, label]) => ({ value, label })), type, (v) => { type = v; seed = ""; regen(); })),
@@ -181,7 +211,8 @@ export async function mountDM(app, { home } = {}) {
   }
 
   async function mapForLocation(loc) {
-    const m = generateMap(loc.type || "dungeon", undefined, { name: loc.name });
+    // the location's description shapes the map (a "flooded chapel" gets water and an altar)
+    const m = mapFromPlan(planFromText(`${loc.type || ""} ${loc.name || ""} ${loc.description || ""}`, { fallbackType: loc.type || "dungeon", name: loc.name }));
     const show = await confirmDialog(`Map for ${loc.name} created. Show it to players now? It starts fully hidden.`, { ok: "Show to players", cancel: "Just save it" });
     act("saveMap", { map: m, activate: show }).then(() => { toast("Map saved"); tabset.select("table"); });
   }

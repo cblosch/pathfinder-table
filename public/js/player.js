@@ -1,4 +1,5 @@
-import { h, clear, tabs, toast, copyText, modal, isMobile, onLayoutChange, actionSheet, themeToggle } from "./ui.js";
+import { h, clear, tabs, toast, copyText, modal, isMobile, onLayoutChange, actionSheet, themeToggle, promptDialog } from "./ui.js";
+import { planFromText, mapFromPlan } from "./mapdesc.js";
 import { shopsPanel } from "./shops.js";
 import { petsTab } from "./pets.js";
 import { act, connect, session, shareInfo, canPrint, isArtifact, onWaitingForGM, saveToLibrary, forget } from "./transport.js";
@@ -34,14 +35,14 @@ export function mountPlayer(app, { home } = {}) {
   const unreadLog = () => (isMobile() && tabset?.current !== "play" && state ? Math.min(99, state.log.length - seenLog) : 0);
   // Re-render without losing scroll position, typed text or focus.
   const keepScroll = (fn) => {
-    const y = window.scrollY, m = main.scrollTop;
+    const y = window.scrollY, m = main.scrollTop, tb = main.querySelector(".tab-body"), t = tb?.scrollTop || 0;
     const vals = {};
     main.querySelectorAll("input[id], textarea[id], select[id]").forEach((el) => { if (el.type !== "file") vals[el.id] = el.type === "checkbox" ? el.checked : el.value; });
     const focused = document.activeElement?.id;
     fn();
     for (const [k, v] of Object.entries(vals)) { const el = document.getElementById(k); if (el && main.contains(el)) { if (el.type === "checkbox") el.checked = v; else el.value = v; } }
     if (focused) document.getElementById(focused)?.focus({ preventScroll: true });
-    main.scrollTop = m; window.scrollTo(0, y);
+    main.scrollTop = m; if (tb) tb.scrollTop = t; window.scrollTo(0, y);
   };
   let shownMapId = null;
 
@@ -116,11 +117,14 @@ export function mountPlayer(app, { home } = {}) {
       state.maps?.length ? selectEl([{ value: "", label: "Choose a map…" }, ...state.maps.map((m) => ({ value: m.id, label: m.name }))], state.activeMapId || "", (v) => v && act("setActiveMap", { id: v })) : null,
       selectEl(Object.entries(MAP_TYPES).map(([value, label]) => ({ value, label })), type, (v) => (type = v)),
       h("button", { class: "small", onclick: () => newMap(type) }, "+ New map"),
+      h("button", { class: "small", onclick: async () => { const d = await promptDialog("Describe the map", "", "e.g. A ruined watchtower in a dense forest, with a stream and a bridge"); if (d) newMap(type, "", d); } }, "+ Map from description"),
       state.map ? h("button", { class: "small", onclick: () => act("placeParty") }, "Place party") : null,
       state.map ? h("button", { class: "small", onclick: async () => (await confirmDialog("Reveal the whole map for everyone?", { ok: "Reveal all" })) && act("fog", { mapId: state.map.id, all: true }) }, "Reveal all") : null);
   }
-  async function newMap(type, name) {
-    const m = generateMap(type, undefined, { name: name || MAP_TYPES[type] });
+  async function newMap(type, name, description = "") {
+    const m = description
+      ? mapFromPlan(planFromText(`${name || ""} ${description}`, { fallbackType: type, name }))
+      : generateMap(type, undefined, { name: name || MAP_TYPES[type] });
     await act("saveMap", { map: m, activate: true });
     await act("placeParty").catch(() => {});
     tabset.select("map");
@@ -207,7 +211,7 @@ export function mountPlayer(app, { home } = {}) {
           (p.npcs || []).length ? h("ul", {}, p.npcs.map((n) => h("li", {}, h("strong", {}, n.name), ` (${n.role || ""}): ${n.description || ""}`, n.secret ? h("em", { class: "secret" }, ` ${n.secret}`) : null))) : null,
           (p.secrets || []).length ? h("ul", {}, p.secrets.map((x) => h("li", {}, x.text))) : null),
         (p.acts || []).length ? [h("h4", {}, "Chapters"), h("ol", {}, p.acts.map((a) => h("li", {}, h("strong", {}, a.title), a.summary ? `: ${a.summary}` : "")))] : null,
-        (p.locations || []).length ? [h("h4", {}, "Places"), h("div", { class: "row wrap" }, p.locations.map((l) => h("button", { class: "small", title: l.description || "", onclick: () => newMap(l.type || "dungeon", l.name) }, `🗺 ${l.name}`)))] : null,
+        (p.locations || []).length ? [h("h4", {}, "Places"), h("div", { class: "row wrap" }, p.locations.map((l) => h("button", { class: "small", title: l.description || "", onclick: () => newMap(l.type || "dungeon", l.name, l.description || "") }, `🗺 ${l.name}`)))] : null,
         h("p", { class: "hint" }, "Tap a place to make its map and put the party there."),
         h("button", { class: "small", onclick: async () => (await confirmDialog("Start a different adventure? The current plot is replaced.", { ok: "Change adventure" })) && act("setPlot", { plot: { title: "", synopsis: "", setting: "", hooks: "", acts: [], npcs: [], locations: [], secrets: [] } }) }, "Change adventure")));
     }
