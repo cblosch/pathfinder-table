@@ -930,3 +930,43 @@ body .attr strong, body .vital .big, body .big-dc, body .roll-total .total { fon
 /* radio and checkbox bubbles keep their size next to long text */
 input[type="radio"], input[type="checkbox"] { flex: none; width: 1.05em; height: 1.05em; accent-color: var(--accent); }
 .mode-opt input { margin-top: .3em; }
+
+/* small labels: one line, plain lowercase, text centered in the pill */
+.tag { white-space: nowrap; font-variant: normal; letter-spacing: 0; line-height: 1.45; padding: .1em .65em; vertical-align: middle; }
+
+/* ================= tab labels standing up from the top of the book =================
+   On desktop the tab bar sits on the book itself, outside the scrolling page:
+   vertical paper labels tucked under the page edge, each at its own slight
+   tilt, the open one standing taller and in ribbon gold. */
+@media (min-width: 761px) {
+  .layout { margin-top: 104px; height: calc(100vh - 49px - 122px); }
+  .layout > nav.tabs.hoisted {
+    position: absolute; left: 3.2em; bottom: calc(100% - 10px); z-index: 0;
+    display: flex; align-items: flex-end; gap: .35em; flex-wrap: nowrap;
+    margin: 0; padding: 0; background: none; border: none;
+  }
+  .layout > .main, .layout > .side { z-index: 1; }
+  .layout > nav.tabs.hoisted button {
+    writing-mode: vertical-rl; text-orientation: mixed;
+    position: relative; height: auto; min-height: 5.2em; padding: .7em .32em 1.1em; margin: 0;
+    font-family: var(--font-black); font-size: 1.08rem; line-height: 1; letter-spacing: .02em; white-space: nowrap;
+    color: var(--tab-ink); background: var(--tab); border: none; border-radius: 3px 3px 0 0;
+    clip-path: none; box-shadow: 1px -1px 0 rgba(60, 35, 10, .18); opacity: .92;
+    transform-origin: 50% 100%; transform: rotate(-2.2deg) translateY(12px);
+    transition: transform .15s ease;
+  }
+  .layout > nav.tabs.hoisted button:nth-of-type(3n+2) { transform: rotate(1.8deg) translateY(16px); }
+  .layout > nav.tabs.hoisted button:nth-of-type(3n) { transform: rotate(-.8deg) translateY(9px); }
+  .layout > nav.tabs.hoisted button:nth-of-type(4n) { transform: rotate(2.6deg) translateY(14px); }
+  .layout > nav.tabs.hoisted button:hover { opacity: 1; transform: rotate(0deg) translateY(4px); }
+  .layout > nav.tabs.hoisted button.active { opacity: 1; background: var(--ribbon); color: #2a1b06; transform: rotate(-.6deg) translateY(-6px); }
+  .layout > nav.tabs.hoisted .badge { writing-mode: horizontal-tb; display: inline-block; margin: .35em 0 0; font-size: .7rem; }
+  .layout > nav.tabs.hoisted .tab-sep { width: .9em; margin: 0; background: none; }
+  .layout > nav.tabs.hoisted .tab-sep::after { content: none; }
+  /* the old in-page band is no longer needed */
+  .layout > .main { padding-top: 1.6em; }
+}
+@media (min-width: 761px) {
+  .layout > nav.tabs.hoisted { gap: .6em; }
+  .layout > nav.tabs.hoisted button { padding: .75em .5em 1.15em; font-size: 1.12rem; }
+}

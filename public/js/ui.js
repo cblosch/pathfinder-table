@@ -76,7 +76,7 @@ export function actionSheet(title, items) {
 // Tabs. On desktop: a top bar with every tab. On phones: a fixed bottom bar
 // with the `primary` tabs plus "More", which opens the rest in a sheet.
 // def: { id, label, icon, render, primary, mobileOnly, badge: () => n }
-export function tabs(defs, { onChange, initial, persistKey } = {}) {
+export function tabs(defs, { onChange, initial, persistKey, hoist } = {}) {
   let current = initial || defs[0].id;
   try { if (persistKey && localStorage.getItem(persistKey)) current = localStorage.getItem(persistKey); } catch {}
   const visible = () => defs.filter((d) => isMobile() || !d.mobileOnly);
@@ -132,7 +132,18 @@ export function tabs(defs, { onChange, initial, persistKey } = {}) {
     drawBar();
     if (current !== before) { clear(body); body.append(defs.find((d) => d.id === current).render()); }
   });
-  return { el: h("div", { class: "tabset" }, bar, body), select, refresh: render, updateBar: drawBar, get current() { return current; } };
+  const el = h("div", { class: "tabset" }, bar, body);
+  // On desktop the bar can live outside the scrolling page (the labels stand
+  // up from the top of the book); on phones it stays in place as bottom nav.
+  const place = () => {
+    const target = hoist && !isMobile() ? hoist() : null;
+    if (target) { if (bar.parentElement !== target) target.prepend(bar); }
+    else if (bar.parentElement !== el) el.prepend(bar);
+    bar.classList.toggle("hoisted", !!target);
+  };
+  place();
+  onLayoutChange(place);
+  return { el, select, refresh: render, updateBar: drawBar, place, get current() { return current; } };
 }
 
 export function field(label, input, hint) {

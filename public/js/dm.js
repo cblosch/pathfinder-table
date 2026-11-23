@@ -383,7 +383,7 @@ export async function mountDM(app, { home } = {}) {
     { id: "shops", group: "campaign", label: "Shops", icon: "🏪", render: () => shopsPanel(state, { gm: true }) },
     { id: "tools", group: "campaign", label: "GM tools", icon: "🧰", render: toolsTab },
     { id: "reference", group: "reference", label: "Rules", icon: "📚", render: () => referencePanel({ isDM: true }) },
-  ], { persistKey: `pftable.dmtab.${session.code}`, onChange: (id) => { if (id === "play") { seenLog = state.log.length; logPanel.scrollDown(); tabset.updateBar(); } } });
+  ], { hoist: () => main.parentElement, persistKey: `pftable.dmtab.${session.code}`, onChange: (id) => { if (id === "play") { seenLog = state.log.length; logPanel.scrollDown(); tabset.updateBar(); } } });
 
   function playTab() {
     seenLog = state.log.length;

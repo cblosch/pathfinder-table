@@ -187,7 +187,7 @@ export function mountPlayer(app, { home } = {}) {
     { id: "party", group: "campaign", label: "Party", icon: "👥", render: partyTab },
     { id: "notes", group: "campaign", label: "Journal", icon: "📓", render: notesTab },
     { id: "rules", group: "reference", label: "Rules", icon: "📚", render: () => referencePanel({ isDM: false }) },
-  ], { persistKey: `pftable.ptab.${session.code}`, onChange: (id) => { if (id === "play") { seenLog = state.log.length; logPanel.scrollDown(); } drawHeader(); tabset.updateBar(); } });
+  ], { hoist: () => main.parentElement, persistKey: `pftable.ptab.${session.code}`, onChange: (id) => { if (id === "play") { seenLog = state.log.length; logPanel.scrollDown(); } drawHeader(); tabset.updateBar(); } });
 
   function storyTab() {
     const p = state.plot || {};
