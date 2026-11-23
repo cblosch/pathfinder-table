@@ -1008,3 +1008,8 @@ input[type="radio"], input[type="checkbox"] { flex: none; width: 1.05em; height:
   .layout > .main > :not(.tabset) { overflow: auto; }
   .layout .builder-summary { top: .4em; max-height: calc(100vh - 260px); }
 }
+
+/* focus: a ring on the field's own border, following its rounded corners */
+input:focus-visible, select:focus-visible, textarea:focus-visible,
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 4px; }
