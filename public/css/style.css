@@ -970,3 +970,9 @@ input[type="radio"], input[type="checkbox"] { flex: none; width: 1.05em; height:
   .layout > nav.tabs.hoisted { gap: .6em; }
   .layout > nav.tabs.hoisted button { padding: .75em .5em 1.15em; font-size: 1.12rem; }
 }
+@media (min-width: 761px) {
+  /* the open page's label sits lowest: it's tucked deeper into the book, like a
+     bookmark in the page you've turned to */
+  .layout > nav.tabs.hoisted button.active { transform: rotate(-.4deg) translateY(34px); box-shadow: inset 0 -10px 12px -8px rgba(60, 35, 10, .35); }
+  .layout > nav.tabs.hoisted button.active:hover { transform: rotate(-.4deg) translateY(34px); }
+}
