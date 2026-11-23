@@ -63,13 +63,15 @@ async function landing(error) {
   let gmless = false;
   app.append(
     h("div", { class: "landing" },
-      h("div", { class: "row end" }, themeToggle()),
+      h("div", { class: "row end landing-theme" }, themeToggle()),
+      h("div", { class: "page-left" },
       h("header", { class: "hero" },
         h("h1", {}, "Pathfinder Table"),
         h("p", {}, "Run Pathfinder Second Edition (Remaster) games for up to six players and a GM: shared maps, handouts, a character builder and GM tools in one place.")),
       error ? h("p", { class: "error" }, error) : null,
       recentBox,
-      libraryPanel(app, { refresh: () => landing() }),
+      libraryPanel(app, { refresh: () => landing() })),
+      h("div", { class: "page-right" },
       h("div", { class: "cards" },
         h("section", { class: "card" },
           h("h2", {}, "Start a game"),
@@ -78,7 +80,7 @@ async function landing(error) {
             h("label", { class: "mode-opt" }, h("input", { type: "radio", name: "mode", value: "gm", checked: true, onchange: () => (gmless = false) }),
               h("span", {}, h("strong", {}, "I'll be the GM"), h("small", {}, isArtifact ? "You run the game; players join with a code." : "You get a private GM link and a join code for players."))),
             h("label", { class: "mode-opt" }, h("input", { type: "radio", name: "mode", value: "nogm", onchange: () => (gmless = true) }),
-              h("span", {}, h("strong", {}, "No GM"), h("small", {}, "Everyone plays and shares the GM's jobs: the map reveals as you explore, enemies take their own turns, and an oracle or the AI narrates.")))),
+              h("span", {}, h("strong", {}, "No GM"), h("small", {}, "Everyone plays and shares the GM's jobs: the map reveals as you explore, enemies take their own turns, and an oracle answers questions.")))),
           h("button", { class: "primary", onclick: async (e) => {
             e.target.disabled = true;
             try {
@@ -96,7 +98,7 @@ async function landing(error) {
         ? h("p", { class: "hint" }, "Everyone plays from this same page while signed in to claude.ai. In a GM game, the GM's screen runs the game, so keep it open during the session. Without a GM, any player's open screen runs it.")
         : h("p", { class: "hint install-hint" }, "On a phone: use your browser's Share or menu button and choose “Add to Home Screen” to open Pathfinder Table like an app."),
       h("footer", {}, "Rules text: Paizo's Pathfinder Remaster books under the ORC license, via the Foundry VTT pf2e dataset. Every rule links to ",
-        h("a", { href: "https://2e.aonprd.com/", target: "_blank", rel: "noopener" }, "Archives of Nethys"), " for checking.")));
+        h("a", { href: "https://2e.aonprd.com/", target: "_blank", rel: "noopener" }, "Archives of Nethys"), " for checking."))));
   try {
     const games = await myGames();
     if (games.length) {

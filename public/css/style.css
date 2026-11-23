@@ -718,3 +718,119 @@ details.sell summary { cursor: pointer; font-variant: small-caps; letter-spacing
 .pet-edit h4 .tag { margin-left: .5em; font-size: .75em; }
 .statblock.pet { margin-top: .6em; }
 .pets .statblock.pet { margin-top: 0; }
+
+/* ================= the book (final layer, desktop) =================
+   The app is an open journal lying on a dark desk: a leather cover, a stack of
+   page edges, the main view on the left page and the table talk on the right,
+   a ribbon bookmark in the gutter, and parchment tab labels along the top.
+   Headings are blackletter; the writing stays handwritten (Fondamento). */
+:root {
+  --font-black: "Pirata One", "IM Fell English", Georgia, serif;
+  --desk: #120e0a; --cover: #3b2a1a; --cover-edge: #22180f; --page-edge: #d9c9a4;
+  --page: #efe2c2; --page-dark: #d8c296; --ribbon: #c9a64a; --ribbon-dark: #8e6f22; --tab: #d6b766; --tab-ink: #3b2a10;
+  --drip: rgba(120, 82, 36, .07);
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --desk: #080605; --cover: #2a1d12; --cover-edge: #140e08; --page-edge: #4a3b28; --page: #2a2118; --page-dark: #1d1610; --ribbon: #a8862f; --ribbon-dark: #5e4914; --tab: #8b6f2c; --tab-ink: #f3e5c0; --drip: rgba(0, 0, 0, .18); } }
+:root[data-theme="dark"] { --desk: #080605; --cover: #2a1d12; --cover-edge: #140e08; --page-edge: #4a3b28; --page: #2a2118; --page-dark: #1d1610; --ribbon: #a8862f; --ribbon-dark: #5e4914; --tab: #8b6f2c; --tab-ink: #f3e5c0; --drip: rgba(0, 0, 0, .18); }
+
+h1, h2, h3, .bsec > h3, .card > h2, .hero h1, .brand, .sum-title { font-family: var(--font-black); font-weight: 400; letter-spacing: .01em; }
+.bsec > h3, .card > h2 { font-style: normal; font-size: 1.55rem; }
+.bsec > h3::before, .card > h2::before { content: none; }
+h4 { font-family: var(--font-black); font-weight: 400; font-size: 1.15rem; }
+
+/* aged paper used for every page */
+.layout > .main, .layout > .side, #app > .landing, #app > .lib-page, #app > .builder {
+  background:
+    /* faint drips running down the page */
+    linear-gradient(90deg, transparent 18%, var(--drip) 18.1%, transparent 18.3%, transparent 61%, var(--drip) 61.1%, transparent 61.25%, transparent 83%, var(--drip) 83.1%, transparent 83.2%) top / 100% 70% no-repeat,
+    radial-gradient(circle at 14% 9%, var(--fox) 0 3px, transparent 7px),
+    radial-gradient(circle at 17% 12%, var(--fox) 0 1.5px, transparent 4px),
+    radial-gradient(circle at 78% 71%, var(--fox) 0 4px, transparent 9px),
+    radial-gradient(circle at 81% 76%, var(--fox) 0 2px, transparent 5px),
+    radial-gradient(ellipse 30% 22% at 82% 18%, var(--stain), transparent 70%),
+    radial-gradient(ellipse 36% 26% at 20% 84%, var(--stain), transparent 72%),
+    var(--grain),
+    radial-gradient(ellipse at 50% 45%, var(--page) 55%, var(--page-dark) 100%);
+}
+
+@media (min-width: 761px) {
+  body { background: radial-gradient(ellipse at 50% 30%, color-mix(in srgb, var(--desk) 80%, #3a2a1a) 0, var(--desk) 70%) fixed; }
+  /* running head on the desk */
+  .topbar { background: transparent; border: none; color: #e8d9b6; padding-bottom: .2em; }
+  .topbar .title, .topbar .brand { color: #f0e2bf; }
+  .topbar button, .topbar .button { background: color-mix(in srgb, var(--tab) 85%, transparent); color: var(--tab-ink); border-color: var(--ribbon-dark); }
+  .topbar .code, .topbar .tag, .topbar .seat-tag { color: #e8d9b6; border-color: #7a6440; }
+
+  /* the open book */
+  .layout {
+    position: relative; margin: 26px auto 18px; width: min(1560px, calc(100vw - 56px)); height: calc(100vh - 49px - 44px);
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 36%); gap: 0;
+    padding: 14px 16px 16px; border-radius: 10px;
+    background: linear-gradient(180deg, var(--cover), var(--cover-edge));
+    box-shadow: 0 0 0 2px var(--cover-edge), 0 24px 60px rgba(0, 0, 0, .7), inset 0 0 0 1px rgba(255, 220, 160, .08);
+  }
+  .layout > .main, .layout > .side {
+    position: relative; border: none; border-radius: 3px 0 0 3px;
+    box-shadow: -1px 0 0 var(--page-edge), -3px 1px 0 color-mix(in srgb, var(--page-edge) 70%, #000), -5px 2px 0 var(--page-edge), -7px 3px 0 color-mix(in srgb, var(--page-edge) 60%, #000);
+  }
+  .layout > .main {
+    padding: 1.2em 2.6em 2em 2.4em;
+    box-shadow: inset -34px 0 30px -24px rgba(40, 22, 6, .38), -1px 0 0 var(--page-edge), -3px 1px 0 color-mix(in srgb, var(--page-edge) 70%, #000), -5px 2px 0 var(--page-edge), -7px 3px 0 color-mix(in srgb, var(--page-edge) 60%, #000);
+  }
+  .layout > .side {
+    border-radius: 0 3px 3px 0; border-left: none;
+    box-shadow: 1px 0 0 var(--page-edge), 3px 1px 0 color-mix(in srgb, var(--page-edge) 70%, #000), 5px 2px 0 var(--page-edge), 7px 3px 0 color-mix(in srgb, var(--page-edge) 60%, #000);
+    padding: .4em 1.1em 0 2.4em;
+  }
+  /* the gutter: shadows meeting in the middle */
+  .layout > .side::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 34px; pointer-events: none; background: linear-gradient(90deg, rgba(40, 22, 6, .32), rgba(60, 35, 10, .12) 40%, transparent); }
+  /* the ribbon bookmark */
+  .layout > .side::before {
+    content: ""; position: absolute; top: -14px; left: 10px; width: 26px; height: min(78%, 640px); z-index: 4; pointer-events: none;
+    background: linear-gradient(90deg, var(--ribbon-dark), var(--ribbon) 30%, color-mix(in srgb, var(--ribbon) 70%, #fff) 50%, var(--ribbon) 70%, var(--ribbon-dark));
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - 16px), 0 100%);
+    filter: drop-shadow(1px 2px 2px rgba(0, 0, 0, .35));
+  }
+
+  /* tab labels: parchment flags slanted along the top of the left page */
+  .main > .tabset > .tabs, .tabs:not(.bottom-nav) {
+    background: transparent; border-bottom: none; gap: .35em .25em; padding: .2em 0 .8em; position: sticky; top: 0;
+  }
+  .tabs:not(.bottom-nav) button {
+    position: relative; font-family: var(--font-black); font-size: 1.12rem; letter-spacing: .02em;
+    color: var(--tab-ink); background: linear-gradient(180deg, color-mix(in srgb, var(--tab) 80%, #fff), var(--tab));
+    border: none; border-radius: 0; padding: .25em 1.05em .3em .9em;
+    clip-path: polygon(0 0, 100% 0, calc(100% - 9px) 50%, 100% 100%, 0 100%, 7px 50%);
+    transform: rotate(-2deg); box-shadow: none; opacity: .86;
+  }
+  .tabs:not(.bottom-nav) button:nth-child(even) { transform: rotate(1.5deg); }
+  .tabs:not(.bottom-nav) button:hover { opacity: 1; }
+  .tabs:not(.bottom-nav) button.active { opacity: 1; transform: rotate(0) translateY(-2px); background: linear-gradient(180deg, color-mix(in srgb, var(--ribbon) 70%, #fff), var(--ribbon)); color: #2a1b06; font-weight: 400; }
+  .tabs .badge { font-family: var(--font-body); margin-left: .35em; }
+
+  /* journal entries: no boxes, ornamental dividers like the reference pages */
+  .layout .bsec, .layout .card { border-left: none; padding: .2em 0 .2em; margin: 1.1em 0 0; }
+  .layout .bsec::after, .layout .card::after {
+    content: "◈"; margin: 1em auto 0; width: 60%; font-size: .7em; color: var(--muted); letter-spacing: 0; opacity: .7;
+    background: linear-gradient(90deg, transparent, var(--muted) 30%, transparent 47%, transparent 53%, var(--muted) 70%, transparent) center / 100% 1px no-repeat;
+  }
+  .builder-summary { background: transparent; border: 1px solid color-mix(in srgb, var(--line) 70%, transparent); box-shadow: 2px 3px 0 rgba(60, 35, 10, .08); }
+
+  /* landing, library and builder pages outside a game: one open book too */
+  #app > .landing, #app > .lib-page, #app > .builder {
+    position: relative; margin: 26px auto; width: min(1280px, calc(100vw - 56px)); padding: 2em 3em 2.4em; border-radius: 4px;
+    box-shadow: 0 0 0 14px var(--cover), 0 0 0 16px var(--cover-edge), 0 24px 60px 16px rgba(0, 0, 0, .7);
+  }
+  #app > .landing { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 6em; align-items: start; }
+  #app > .landing > .landing-theme { position: absolute; top: 1.2em; right: 1.6em; }
+  #app > .landing .cards { display: block; }
+  #app > .landing .card, #app > .landing .bsec { border-left: none; padding-left: 0; }
+  #app > .landing .card::after, #app > .landing .bsec::after {
+    content: "◈"; margin: 1em auto 0; width: 60%; font-size: .7em; color: var(--muted); letter-spacing: 0; opacity: .7;
+    background: linear-gradient(90deg, transparent, var(--muted) 30%, transparent 47%, transparent 53%, var(--muted) 70%, transparent) center / 100% 1px no-repeat;
+  }
+  #app > .landing .hero { text-align: center; }
+  #app > .landing::before { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 46px; transform: translateX(-50%); pointer-events: none;
+    background: linear-gradient(90deg, transparent, rgba(60, 35, 10, .16) 45%, rgba(40, 22, 6, .3) 50%, rgba(60, 35, 10, .16) 55%, transparent); }
+  #app > .landing .cards { column-gap: 5em; }
+}
