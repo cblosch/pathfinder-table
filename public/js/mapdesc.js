@@ -4,6 +4,7 @@
 // keywords; when the AI is available it can read the description instead and
 // return the same kind of plan. Either way the GM sees what was understood.
 import { generateMap, rng, MAP_TYPES } from "./map.js";
+import { parseScene, placeScene, describeScene } from "./mapscene.js";
 
 const NUM = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, a: 1, an: 1, single: 1, couple: 2, few: 3, several: 4, many: 8, dozen: 12 };
 const num = (s) => (/^\d+$/.test(s) ? +s : NUM[s.toLowerCase()]);
@@ -17,8 +18,8 @@ export const FEATURES = {
   pillars: { label: "pillars", words: /\b(pillars?|columns?|colonnade|pillared)\b/ },
   altar: { label: "altar", words: /\b(altars?|sacrificial|sacrifices?|ritual (stone|site|circle)|sanctum)\b/ },
   statue: { label: "statue", words: /\b(statues?|idol|monument|obelisk|fountain)\b/ },
-  rubble: { label: "rubble", words: /\b(rubble|collapsed|ruined|ruins|crumbling|caved[- ]in|debris)\b/ },
-  ruins: { label: "ruins", words: /\b(ruins|ruined|abandoned (fort|tower|keep|village)|old foundations)\b/ },
+  rubble: { label: "rubble", words: /\b(rubble|collapsed|caved[- ]in|debris|cave-in)\b/ },
+  ruins: { label: "ruins", words: /\b(ruins|abandoned (fort|keep|village)|old foundations)\b/ },
   camp: { label: "camp", words: /\b(camp|campsite|campfire|bonfire|tents?|bandit camp|encampment)\b/ },
   road: { label: "road", words: /\b(road|path|trail|highway|track)\b/ },
   noRoad: { label: "no road", words: /\b(no road|trackless|pathless|wild)\b/ },
@@ -42,8 +43,21 @@ const TYPE_WORDS = [
 ];
 
 /** Read a description with keywords. Returns a plan. */
+// Rephrase a few constructions so both readers see the thing itself:
+// "a pool of lava" is lava, "a bridge of rock" is a bridge, "a hoard of treasure" is treasure.
+export function tidyDescription(text) {
+  return ` ${String(text || "").toLowerCase()} `
+    .replace(/\b(?:pools?|lakes?|seas?|rivers?|streams?|flows?|fields?|pits?|channels?) of (lava|magma)\b/g, (m0, x) => (/lake|sea|river|field/.test(m0) ? "great lava" : "lava"))
+    .replace(/\b(?:sheets?|patch(?:es)?|fields?) of ice\b/g, "ice")
+    .replace(/\b(?:made |built |carved |hewn )?(?:of|from) (?:solid |rough |black |white )?(rock|stone|wood|timber|bone|bones|iron|obsidian|marble|ice|rope)\b/g, " ")
+    .replace(/\b(?:a |the )?(?:pile|heap|hoard|stack|mound|cluster|scattering|bunch|collection|set|group)s? of (\w+)/g, "$1")
+    .replace(/\b(?:a |the )?(?:ring|circle) of (stones|standing stones|pillars|candles|torches|statues|trees|tents|mushrooms|skulls|columns|menhirs|braziers)\b/g, "$1 ringed")
+    .replace(/\s+/g, " ");
+}
+
 export function planFromText(text, { fallbackType = "dungeon", name = "" } = {}) {
-  const t = ` ${String(text || "").toLowerCase()} `;
+  text = tidyDescription(text);
+  const t = ` ${text} `;
   // type: the earliest strong match wins, so "a cave beneath the town" is a cave
   // the earliest place word wins, but landscape words only decide when nothing
   // else does: a "desert city" is a city, a "forest shrine" is outdoors
@@ -63,17 +77,19 @@ export function planFromText(text, { fallbackType = "dungeon", name = "" } = {})
   // a temple or chapel interior has an altar even when the word isn't used
   if ((type === "dungeon" || type === "cave") && /\b(temple|chapel|shrine|cathedral)\b/.test(t)) features.push("altar");
   const underground = /\b(underground|subterranean|beneath the (surface|earth|ground|mountain)|below (the )?ground|under the (earth|mountain|city|ground)|in a (vast |huge |great )?(cavern|cave))\b/.test(t);
-  const layout = /\b(strip|row of|rows of|line of|lined with|single street|one street|long street|main street|one road|leading (up )?to|along (a|the|one) (\w+ )?(road|street|path|avenue|track|causeway|boardwalk))\b/.test(t) ? "strip" : null;
+  const layout = !/\b(town|village|city|hamlet|settlement|street|houses|homes|huts|shacks|hovels|cottages|buildings)\b/.test(t) ? null : /\b(strip|row of|rows of|line of|lined with|single street|one street|long street|main street|one road|leading (up )?to|along (a|the|one) (\w+ )?(road|street|path|avenue|track|causeway|boardwalk))\b/.test(t) ? "strip" : null;
   const landmark = /\b(ziggurat|pyramid|step pyramid|stepped (temple|pyramid|structure|platform))\b/.test(t) ? "ziggurat" : null;
   // which way things lead: "houses leading north", "the altar at the west end", "northward"
   const dm = /\b(north|south|east|west)(ward|wards|ern)?\b/.exec(t);
   const direction = dm ? dm[1] : null;
   // where things are: each clause's direction applies to the features named in it
   const where = {};
+  // "east of the oasis" says where something else is, not the oasis
+  const RELDIR = /\b(north|south|east|west)(ern)?[- ]?(east|west)?\s+of\b|\bto the (north|south|east|west)\w* of\b/g;
   const COURSE = /\b(north|south|east|west)(ern)?\w*[\s-]+(to|and|-|through)?[\s-]*(the )?(north|south|east|west)\w*|\b(flows?|runs?|running|flowing|winds?|winding|cuts?|cutting|crosses|crossing) (from )?(the )?(north|south|east|west)\w*([\s-]+(to|and|-|through)?[\s-]*(the )?(north|south|east|west)\w*)?/g;
   for (const raw of t.split(/[.;,]|\b(?:and|with|while|where|but|then|which|beyond|past)\b/)) {
     // a course ("running north to south") says which way something runs, not where it is
-    const clause = raw.replace(COURSE, " ");
+    const clause = raw.replace(COURSE, " ").replace(RELDIR, " ");
     const d = dirIn(clause);
     if (!d) continue;
     for (const f of Object.keys(FEATURES)) if (!where[f] && FEATURES[f].words.test(` ${raw} `)) where[f] = d;
@@ -87,7 +103,17 @@ export function planFromText(text, { fallbackType = "dungeon", name = "" } = {})
   const buildingNoun = bm ? bm[3] : null;
   const place = /\b(far (end|side|edge)|other (end|side)|across (the|from))\b/.test(t) ? "far" : /\b(middle|center|centre|heart)\b/.test(t) ? "center" : null;
   const buildingKinds = BUILDING_KINDS.filter(([, re]) => re.test(t)).map(([n]) => n);
-  return normalizePlan({ type, size, rooms, buildings, features, name, underground, layout, landmark, buildingKinds, direction, buildingNoun, place, where, riverAxis });
+  // the free-form reading: things, counts, directions and how they relate
+  const scene = parseScene(text);
+  const has = (cpt) => scene.entities.some((e) => e.concept === cpt);
+  // the scene places these itself, with their relations; the feature passes skip them
+  const related = (cpt) => scene.entities.some((e) => e.concept === cpt && scene.relations.some((r) => r.a === e.id || r.b === e.id));
+  const handled = { altar: has("altar") && !landmark, statue: has("statue"), building: has("hut") || has("tower"), stairs: has("stairs"), pillars: has("pillar"), camp: related("fire"), bridge: related("bridge"), lake: has("lava") && !/\b(lake|pond|water|spring|oasis)\b/.test(t.replace(/great lava/g, "")) };
+  const kept = features.filter((f) => !handled[f]);
+  // a town's houses and shops come from the town builder, not as separate buildings
+  if (type === "town") { const drop = new Set(scene.entities.filter((e) => e.concept === "hut").map((e) => e.id)); scene.entities = scene.entities.filter((e) => !drop.has(e.id)); scene.relations = scene.relations.filter((r) => !drop.has(r.a) && !drop.has(r.b)); }
+  if (kept.includes("camp")) scene.entities = scene.entities.filter((e) => !(e.concept === "fire" && !scene.relations.some((r) => r.a === e.id || r.b === e.id)));
+  return normalizePlan({ type, size, rooms, buildings, features: kept, name, underground, layout, landmark, buildingKinds, direction, buildingNoun, place, where, riverAxis, scene });
 }
 
 // Directions, including diagonals and plain-language sides
@@ -128,6 +154,7 @@ export function normalizePlan(p = {}) {
     buildingNoun: p.buildingNoun ? String(p.buildingNoun).slice(0, 20) : null, place: ["far", "center"].includes(p.place) ? p.place : null,
     where: Object.fromEntries(Object.entries(p.where || {}).filter(([k, v]) => DIR_NAMES[v] && (FEATURES[k] || k === "entrance" || k === "landmark"))),
     riverAxis: ["ns", "ew"].includes(p.riverAxis) ? p.riverAxis : null,
+    scene: p.scene && Array.isArray(p.scene.entities) ? { entities: p.scene.entities.slice(0, 60), relations: (p.scene.relations || []).slice(0, 80) } : { entities: [], relations: [] },
   };
 }
 
@@ -141,6 +168,8 @@ export function describePlan(p) {
   const at = (k) => (p.where?.[k] ? ` (${DIR_NAMES[p.where[k]]})` : "");
   if (p.features.length) bits.push(p.features.map((f) => (f === "building" && p.buildingNoun ? `a ${p.buildingNoun}${p.where?.building ? ` (${DIR_NAMES[p.where.building]})` : p.place === "far" ? ` at the ${p.direction ? p.direction + "ern" : "far"} end` : p.place === "center" ? " in the middle" : ""}` : f === "river" && p.riverAxis ? `river running ${p.riverAxis === "ns" ? "north-south" : "east-west"}${at("river")}` : FEATURES[f].label + at(f))).join(", "));
   if (p.where?.entrance) bits.push(`entrance on the ${DIR_NAMES[p.where.entrance]} side`);
+  const sc = p.scene ? describeScene(p.scene) : "";
+  if (sc) bits.push(sc);
   return bits.join(" · ");
 }
 
@@ -164,6 +193,7 @@ export function mapFromPlan(plan, seed = Math.floor(Math.random() * 1e9)) {
   const face = p.where?.entrance;
   if (p.type === "tavern" && face && face !== "c") m = orient(m, DIR_NAMES[face[0]], "south");
   applyFeatures(m, p, r);
+  placeScene(m, p.scene, r, { entranceDir: p.where?.entrance || null, outdoors: p.type === "wilderness" || p.type === "town" });
   m.plan = p;
   return m;
 }

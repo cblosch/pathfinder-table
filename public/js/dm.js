@@ -163,7 +163,7 @@ export async function mountDM(app, { home } = {}) {
     };
     const seedInput = h("input", { placeholder: "random", style: { width: "8em" }, onchange: (e) => (seed = e.target.value) });
     // ---- from a description ----
-    const desc = h("textarea", { id: "map-desc", rows: 3, placeholder: "e.g. A flooded crypt with pillars, an altar and a collapsed stair down. Large." });
+    const desc = h("textarea", { id: "map-desc", rows: 4, placeholder: "e.g. A large flooded crypt. Behind the throne stands a bloodstained altar, and two statues flank it. The entrance is to the south." });
     const understood = h("p", { class: "hint" });
     let plan = null;
     const build = (p) => {
@@ -175,7 +175,7 @@ export async function mountDM(app, { home } = {}) {
       clear(understood).append(h("strong", {}, "Understood as: "), describePlan(p));
     };
     box.append(h("section", { class: "bsec" }, h("h3", {}, "Describe a map"),
-      h("p", { class: "hint" }, "Say what the place is and what's in it: the kind of place, its size, how many rooms or buildings, and features such as a river, lake, bridge, chasm, pillars, altar, statue, camp, ruins, rubble, stairs or furniture."),
+      h("p", { class: "hint" }, "Describe it in your own words: what the place is, how big, what's in it and where things are relative to each other (\"an altar behind the throne\", \"two statues flank the door\", \"a well north of the inn\", \"the entrance is to the south\"). The line below shows what was understood."),
       desc,
       h("div", { class: "row wrap" },
         h("button", { class: "primary", onclick: () => desc.value.trim() && build(planFromText(desc.value, { name })) }, "Build from description"),

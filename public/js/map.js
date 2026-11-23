@@ -23,6 +23,9 @@ export const TERRAIN = {
   "p": { name: "Pillar", color: "#5d5750", block: true },
   "t": { name: "Table / furniture (cover)", color: "#6e4a2a" },
   "v": { name: "Chasm / pit", color: "#0d0b0a", block: true },
+  "o": { name: "Magic circle", color: "#8b6fb0" },
+  "L": { name: "Lava (damaging)", color: "#d2531f" },
+  "I": { name: "Ice (uneven)", color: "#cfe6ee" },
   "?": { name: "Unexplored", color: "#000", block: true },
 };
 
