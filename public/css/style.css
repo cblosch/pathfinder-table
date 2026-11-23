@@ -846,3 +846,48 @@ h4 { font-family: var(--font-black); font-weight: 400; font-size: 1.15rem; }
     background: linear-gradient(90deg, transparent, var(--muted) 30%, transparent 47%, transparent 53%, var(--muted) 70%, transparent) center / 100% 1px no-repeat;
   }
 }
+
+/* ================= fit the builder and sheet to their page =================
+   Layout follows the width of the page they sit on (container queries), so
+   the narrower left page of the book, or a small window, still fits. */
+.builder { container: builder / inline-size; }
+.builder-summary, .sheet { container-type: inline-size; }
+.builder-cols { grid-template-columns: minmax(0, 1fr) 250px; }
+.builder-form, .builder-form > * { min-width: 0; }
+select, input, textarea { max-width: 100%; min-width: 0; }
+.field { min-width: 0; }
+.boost-row { flex-wrap: wrap; }
+.boost-row .lbl { min-width: min(15em, 100%); }
+@container builder (max-width: 640px) {
+  .builder-cols { grid-template-columns: minmax(0, 1fr); }
+  .builder-summary { position: static; max-height: none; }
+  .builder-form .grid3 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+@container builder (max-width: 440px) {
+  .builder-form .grid2, .builder-form .grid3 { grid-template-columns: minmax(0, 1fr); }
+}
+/* attribute boxes: six across when there's room, otherwise two rows of three */
+.attr-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.attr { min-width: 0; }
+@container (max-width: 300px) {
+  .attr-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .35em; }
+  .attr strong { font-size: 1.25em; }
+}
+
+/* the ribbon bookmark: a short, broad, flat silk ribbon */
+@media (min-width: 761px) {
+  .layout > .side::before {
+    top: -10px; left: 6px; width: 38px; height: 170px;
+    background: var(--ribbon);
+    box-shadow: inset 3px 0 0 color-mix(in srgb, var(--ribbon-dark) 45%, transparent), inset -3px 0 0 color-mix(in srgb, var(--ribbon-dark) 45%, transparent);
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - 18px), 0 100%);
+    filter: drop-shadow(1px 2px 1px rgba(0, 0, 0, .3));
+  }
+}
+@media (min-width: 761px) {
+  /* pinned tab labels cover what scrolls under them */
+  .layout .tabs:not(.bottom-nav) {
+    top: -1.2em; z-index: 3; margin: -1.2em -2.6em .4em -2.4em; padding: 1.4em 2.6em 1em 2.4em;
+    background: linear-gradient(180deg, var(--page) 0, var(--page) calc(100% - 14px), transparent);
+  }
+}
