@@ -550,7 +550,7 @@ export function createMapView({ isDM, mySlot = null, onTokenMove, onFog, onPaint
     if (!map) { canvas.width = 10; canvas.height = 10; return; }
     if (fitPending && wrap.clientWidth) { fitPending = false; focus(); return; }
     canvas.width = map.w * cs; canvas.height = map.h * cs;
-    ctx.font = `${Math.max(9, cs * 0.42)}px system-ui, sans-serif`;
+    ctx.font = `${Math.max(9, cs * 0.42)}px Fondamento, "IM Fell English", serif`;
     for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
       const ch = map.cells[y * map.w + x];
       const t = TERRAIN[ch] || TERRAIN["."];
