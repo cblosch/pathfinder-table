@@ -927,3 +927,6 @@ html body, body li, body td, body th, body p, body label, body summary, body dd,
 body h1, body h2, body h3, body h4, body .bsec > h3, body .card > h2, body .brand, body .sum-title, body .tabs:not(.bottom-nav) button { font-family: var(--font-black); }
 body .ho-clue, body .ho-clue * { font-family: var(--font-scrawl); }
 body .attr strong, body .vital .big, body .big-dc, body .roll-total .total { font-family: var(--font-display); }
+/* radio and checkbox bubbles keep their size next to long text */
+input[type="radio"], input[type="checkbox"] { flex: none; width: 1.05em; height: 1.05em; accent-color: var(--accent); }
+.mode-opt input { margin-top: .3em; }
