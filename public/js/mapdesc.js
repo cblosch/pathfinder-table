@@ -15,13 +15,14 @@ export const FEATURES = {
   bridge: { label: "bridge", words: /\bbridges?\b/ },
   chasm: { label: "chasm", words: /\b(chasm|pit|pits|rift|crevasse|abyss|sinkhole|gorge)\b/ },
   pillars: { label: "pillars", words: /\b(pillars?|columns?|colonnade|pillared)\b/ },
-  altar: { label: "altar", words: /\b(altar|shrine|sanctum|chapel|temple|ritual)\b/ },
+  altar: { label: "altar", words: /\b(altars?|sacrificial|sacrifices?|ritual (stone|site|circle)|sanctum)\b/ },
   statue: { label: "statue", words: /\b(statues?|idol|monument|obelisk|fountain)\b/ },
   rubble: { label: "rubble", words: /\b(rubble|collapsed|ruined|ruins|crumbling|caved[- ]in|debris)\b/ },
   ruins: { label: "ruins", words: /\b(ruins|ruined|abandoned (fort|tower|keep|village)|old foundations)\b/ },
   camp: { label: "camp", words: /\b(camp|campsite|campfire|bonfire|tents?|bandit camp|encampment)\b/ },
   road: { label: "road", words: /\b(road|path|trail|highway|track)\b/ },
   noRoad: { label: "no road", words: /\b(no road|trackless|pathless|wild)\b/ },
+  ramshackle: { label: "ramshackle buildings", words: /\b(ramshackle|shanty|shanties|shacks?|hovels?|dilapidated|rickety|crumbling)\b/ },
   stairs: { label: "stairs", words: /\b(stairs?|staircase|steps|ladders?)\b/ },
   furniture: { label: "furniture", words: /\b(tables?|benches|desks?|shelves|bookshelves|library|barracks|beds|crates|barrels)\b/ },
   swamp: { label: "swamp", words: /\b(swamp|marsh|bog|fen|mire|wetland)\b/ },
@@ -31,8 +32,8 @@ export const FEATURES = {
 };
 
 const TYPE_WORDS = [
-  ["tavern", /\b(tavern|inn|alehouse|pub|shop|store|house|home|manor house|interior|hall|mansion|guildhall|cottage|warehouse)\b/],
-  ["town", /\b(town|village|city|hamlet|market|streets?|square|docks|harbou?r|district|settlement)\b/],
+  ["tavern", /\b(tavern|inn|alehouse|pub|shop|store|house|manor house|interior|mansion|guildhall|cottage|warehouse)\b/],
+  ["town", /\b(town|village|city|hamlet|market|streets?|square|docks|harbou?r|district|settlement|slums?|shanty ?town|houses|homes|huts|shacks|hovels|cottages|buildings|row of)\b/],
   ["cave", /\b(cave|caves|cavern|caverns|grotto|mine|mines|tunnels?|burrow|lair|underdark|warren)\b/],
   ["dungeon", /\b(dungeon|crypt|tomb|catacombs?|vault|sewers?|fortress|castle|keep|prison|jail|cellar|basement|labyrinth|maze|temple|library|barracks|sanctum|halls|chambers|rooms)\b/],
   ["wilderness", /\b(forest|woods|wood|jungle|swamp|marsh|bog|field|meadow|road|trail|river|hill|hills|mountain|pass|clearing|camp|coast|beach|desert|plains?|wilderness|grove|glade|valley|ravine)\b/],
@@ -42,8 +43,11 @@ const TYPE_WORDS = [
 export function planFromText(text, { fallbackType = "dungeon", name = "" } = {}) {
   const t = ` ${String(text || "").toLowerCase()} `;
   // type: the earliest strong match wins, so "a cave beneath the town" is a cave
+  // the earliest place word wins, but landscape words only decide when nothing
+  // else does: a "desert city" is a city, a "forest shrine" is outdoors
   let type = null, at = Infinity;
-  for (const [k, re] of TYPE_WORDS) { const m = re.exec(t); if (m && m.index < at) { at = m.index; type = k; } }
+  for (const [k, re] of TYPE_WORDS) { if (k === "wilderness") continue; const m = re.exec(t); if (m && m.index < at) { at = m.index; type = k; } }
+  if (!type && TYPE_WORDS.find(([k]) => k === "wilderness")[1].test(t)) type = "wilderness";
   if (/\b(beneath|under|below|underground)\b/.test(t) && /\b(cave|cavern|tunnel|grotto)\b/.test(t)) type = "cave";
   type ||= fallbackType;
   const size = /\b(tiny|small|cramped|little|narrow|short)\b/.test(t) ? "small" : /\b(huge|vast|sprawling|large|big|massive|enormous|great)\b/.test(t) ? "large" : "medium";
@@ -51,19 +55,41 @@ export function planFromText(text, { fallbackType = "dungeon", name = "" } = {})
   const rooms = countOf(/\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|several|many|few|couple|dozen)\s+(?:\w+\s)?(?:rooms|chambers|cells|halls|vaults|crypts)\b/);
   const buildings = countOf(/\b(\d+|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|several|many|few|couple|dozen)\s+(?:\w+\s)?(?:buildings|houses|homes|huts|cottages|shops)\b/);
   const features = Object.keys(FEATURES).filter((f) => FEATURES[f].words.test(t));
-  return normalizePlan({ type, size, rooms, buildings, features, name });
+  // a temple or chapel interior has an altar even when the word isn't used
+  if ((type === "dungeon" || type === "cave") && /\b(temple|chapel|shrine|cathedral)\b/.test(t)) features.push("altar");
+  const underground = /\b(underground|subterranean|beneath the (surface|earth|ground|mountain)|below (the )?ground|under the (earth|mountain|city|ground)|in a (vast |huge |great )?(cavern|cave))\b/.test(t);
+  const layout = /\b(strip|row of|rows of|line of|lined with|single street|one street|long street|main street|one road|leading (up )?to|along (a|the|one) (\w+ )?(road|street|path|avenue|track|causeway|boardwalk))\b/.test(t) ? "strip" : null;
+  const landmark = /\b(ziggurat|pyramid|step pyramid|stepped (temple|pyramid|structure|platform))\b/.test(t) ? "ziggurat" : null;
+  const buildingKinds = BUILDING_KINDS.filter(([, re]) => re.test(t)).map(([n]) => n);
+  return normalizePlan({ type, size, rooms, buildings, features, name, underground, layout, landmark, buildingKinds });
 }
+
+// Building kinds a description can name (towns only label what's asked for)
+const BUILDING_KINDS = [
+  ["Tavern", /\b(tavern|inn|alehouse|pub)\b/], ["Smithy", /\b(smithy|forge|blacksmith)\b/], ["Temple", /\b(church|cathedral|chapel)\b/],
+  ["Shrine", /\bshrines?\b/], ["Shop", /\b(shops?|stores?|market|merchant)\b/], ["Barracks", /\b(barracks|garrison|guard ?house|guard post)\b/],
+  ["Jail", /\b(jail|prison|stockade|cells)\b/], ["Warehouse", /\b(warehouses?|storehouses?|granary)\b/], ["Stables", /\bstables?\b/],
+  ["Hall", /\b(town hall|meeting hall|longhouse|great hall)\b/], ["Library", /\blibrary\b/], ["Workshop", /\b(workshops?|mill)\b/],
+  ["Cult house", /\b(cult(ist)?s?'? (house|hall|lodge|den)|cult lodge)\b/],
+];
 
 export function normalizePlan(p = {}) {
   const type = MAP_TYPES[p.type] ? p.type : "dungeon";
   const size = ["small", "medium", "large"].includes(p.size) ? p.size : "medium";
   const features = [...new Set((p.features || []).filter((f) => FEATURES[f]))];
   const clamp = (n, a, b) => (Number.isFinite(+n) && n !== null ? Math.max(a, Math.min(b, Math.round(+n))) : null);
-  return { type, size, rooms: clamp(p.rooms, 1, 20), buildings: clamp(p.buildings, 1, 30), features, name: String(p.name || "").slice(0, 80) };
+  return {
+    type, size, rooms: clamp(p.rooms, 1, 20), buildings: clamp(p.buildings, 1, 30), features, name: String(p.name || "").slice(0, 80),
+    underground: !!p.underground, layout: p.layout === "strip" ? "strip" : null, landmark: p.landmark === "ziggurat" ? "ziggurat" : null,
+    buildingKinds: (p.buildingKinds || []).filter((k) => BUILDING_KINDS.some(([n]) => n === k)),
+  };
 }
 
 export function describePlan(p) {
-  const bits = [MAP_TYPES[p.type], `${p.size} size`];
+  const bits = [(p.underground ? "Underground " : "") + MAP_TYPES[p.type].replace(/^./, (c) => (p.underground ? c.toLowerCase() : c)), `${p.size} size`];
+  if (p.layout === "strip") bits.push("one long street");
+  if (p.landmark) bits.push(`${p.landmark}${p.layout === "strip" ? " at the end" : " in the center"}`);
+  if (p.type === "town") bits.push(p.buildingKinds.length ? `buildings: ${["houses", ...p.buildingKinds.map((k) => k.toLowerCase())].join(", ")}` : "houses");
   if (p.rooms) bits.push(`${p.rooms} room${p.rooms > 1 ? "s" : ""}`);
   if (p.buildings) bits.push(`${p.buildings} buildings`);
   if (p.features.length) bits.push(p.features.map((f) => FEATURES[f].label).join(", "));
@@ -82,8 +108,8 @@ export function mapFromPlan(plan, seed = Math.floor(Math.random() * 1e9)) {
   const [w, hh] = DIMS[p.type][["small", "medium", "large"].indexOf(p.size)];
   const opts = { w, h: hh, name: p.name || MAP_TYPES[p.type] };
   if (p.type === "dungeon" && p.rooms) opts.rooms = p.rooms;
-  const m = generateMap(p.type, seed, opts);
   const r = rng(seed ^ 0x5bd1e995);
+  const m = p.type === "town" ? buildTown(p, seed, r) : generateMap(p.type, seed, opts);
   applyFeatures(m, p, r);
   m.plan = p;
   return m;
@@ -194,7 +220,7 @@ function applyFeatures(m, p, r) {
     const rm = big || { x: 2, y: 2, w: W - 4, h: H - 4 };
     for (let x = rm.x + 1; x < rm.x + rm.w - 1; x += 2) for (const y of [rm.y + 1, rm.y + rm.h - 2]) if (FLOORS.includes(get(x, y))) set(x, y, "p");
   }
-  if (has("altar")) { const [x, y] = center(); set(x, y, "t"); set(x + 1, y, "t"); label(x, y - 1, "Altar"); }
+  if (has("altar") && !m.altarPlaced) { const [x, y] = center(); set(x, y, "t"); set(x + 1, y, "t"); label(x, y - 1, "Altar"); }
   if (has("statue")) { const [x0, y0] = center(); const x = x0 + (has("altar") ? 3 : 0), y = y0; if (FLOORS.includes(get(x, y))) { set(x, y, "p"); label(x, y + 1, "Statue"); } }
   if (has("camp")) {
     const [x, y] = outdoors ? center() : center();
@@ -229,4 +255,127 @@ function applyFeatures(m, p, r) {
 
   m.cells = c.join("");
   m.fog = "0".repeat(W * H);
+}
+
+// ---------------------------------------------------------------
+// towns built from the plan
+// ---------------------------------------------------------------
+const TOWN_DIMS = { strip: [[48, 22], [62, 26], [78, 30]], open: [[40, 30], [50, 36], [64, 46]] };
+
+function buildTown(p, seed, r) {
+  const ri = (a, b) => a + Math.floor(r() * (b - a + 1));
+  const strip = p.layout === "strip";
+  const [W, H] = TOWN_DIMS[strip ? "strip" : "open"][["small", "medium", "large"].indexOf(p.size)];
+  const ground = p.underground ? "c" : ",";
+  const c = new Array(W * H).fill(p.underground ? " " : ",");
+  const get = (x, y) => (x < 0 || y < 0 || x >= W || y >= H ? " " : c[y * W + x]);
+  const set = (x, y, v) => { if (x >= 0 && y >= 0 && x < W && y < H) c[y * W + x] = v; };
+  const rect = (x, y, w, h, v) => { for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) set(i, j, v); };
+  const labels = [], rooms = [];
+  const ramshackle = p.features.includes("ramshackle");
+  const stone = p.underground; // stone houses underground, timber above
+  const zigSize = p.size === "small" ? 9 : p.size === "large" ? 13 : 11;
+
+  // the house names: only kinds the description mentions, the rest plain houses
+  const special = [...p.buildingKinds];
+  const houseName = ramshackle ? "Hovel" : "House";
+
+  const house = (x, y, w, h, doorSide) => {
+    rect(x, y, w, h, "#");
+    rect(x + 1, y + 1, w - 2, h - 2, stone ? "." : "b");
+    const dx = x + 1 + ri(0, w - 3);
+    const [doorX, doorY] = doorSide === "down" ? [dx, y + h - 1] : doorSide === "up" ? [dx, y] : doorSide === "left" ? [x, y + 1 + ri(0, h - 3)] : [x + w - 1, y + 1 + ri(0, h - 3)];
+    set(doorX, doorY, "+");
+    if (ramshackle) {
+      for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) {
+        const edge = i === x || j === y || i === x + w - 1 || j === y + h - 1;
+        if (edge && get(i, j) === "#" && r() < 0.14) set(i, j, "^");
+        else if (!edge && r() < 0.12) set(i, j, "^");
+      }
+    }
+    const name = special.length && r() < 0.5 ? special.shift() : houseName;
+    rooms.push({ x, y, w, h, name, n: rooms.length + 1 });
+    labels.push({ x: x + 1, y: y + 1, text: name === houseName ? String(rooms.length) : name, public: name !== houseName });
+  };
+
+  let landmarkAt = null;
+  if (strip) {
+    // one long street, houses shoulder to shoulder on both sides, leading to the landmark
+    const y0 = H >> 1;
+    const endX = p.landmark ? W - zigSize - 4 : W - 3;
+    if (p.underground) {
+      // a long cavern around the street, with ragged walls
+      let top = y0 - 9, bot = y0 + 9;
+      for (let x = 1; x < W - 1; x++) {
+        top = Math.max(1, Math.min(y0 - 7, top + ri(-1, 1))); bot = Math.min(H - 2, Math.max(y0 + 7, bot + ri(-1, 1)));
+        const wide = x > endX - 2; // open up around the landmark
+        for (let y = wide ? 1 : top; y <= (wide ? H - 2 : bot); y++) set(x, y, "c");
+      }
+      for (let k = 0; k < W; k++) { const x = ri(1, W - 2), y = ri(1, H - 2); if (get(x, y) === "c" && Math.abs(y - y0) > 6) set(x, y, r() < 0.5 ? "r" : "^"); }
+    }
+    rect(2, y0 - 1, endX - 1, 3, "=");
+    // houses: walls back onto the street's edge, doors face it
+    const wanted = p.buildings || Infinity;
+    for (const side of [-1, 1]) {
+      let x = 3;
+      while (x < endX - 4 && rooms.length < wanted) {
+        const w = ri(4, 6), h = ri(4, 5);
+        if (x + w > endX - 1) break;
+        const y = side < 0 ? y0 - 2 - h : y0 + 2;
+        house(x, y, w, h, side < 0 ? "down" : "up");
+        x += w + (r() < 0.6 ? 0 : 1); // shoulder to shoulder, the odd alley
+      }
+    }
+    landmarkAt = p.landmark ? [W - 3 - (zigSize >> 1), y0] : null;
+    if (landmarkAt) rect(endX - 1, y0 - 1, landmarkAt[0] - (zigSize >> 1) - endX + 1, 3, "=");
+  } else {
+    // crossroads village or underground warren around a central plaza
+    if (p.underground) {
+      for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+        const d = Math.hypot((x - W / 2) / (W / 2), (y - H / 2) / (H / 2));
+        if (d < 0.92 + (r() - 0.5) * 0.12) set(x, y, "c");
+      }
+    }
+    const cx = W >> 1, cy = H >> 1;
+    rect(3, cy - 1, W - 6, 2, "="); rect(cx - 1, 3, 2, H - 6, "=");
+    const plaza = (p.landmark ? zigSize : 6) + 4;
+    rect(cx - (plaza >> 1), cy - (plaza >> 1), plaza, plaza, ".");
+    labels.push({ x: cx - (plaza >> 1), y: cy - (plaza >> 1), text: p.landmark ? "Plaza" : "Square", public: true });
+    if (p.landmark) landmarkAt = [cx, cy];
+    const wanted = p.buildings || 16;
+    for (let tries = 0; tries < 600 && rooms.length < wanted; tries++) {
+      const w = ri(4, 7), h = ri(4, 6), x = ri(2, W - w - 2), y = ri(2, H - h - 2);
+      let ok = true;
+      for (let j = y - 1; j <= y + h && ok; j++) for (let i = x - 1; i <= x + w && ok; i++) if (get(i, j) !== ground) ok = false;
+      if (!ok) continue;
+      const toRoad = [[0, y - 2, "up"], [0, y + h + 1, "down"], [x - 2, 0, "left"], [x + w + 1, 0, "right"]].find(([i, j, s]) =>
+        s === "up" || s === "down" ? [...Array(w).keys()].some((k) => get(x + k, j) === "=" || get(x + k, j) === ".") : [...Array(h).keys()].some((k) => get(i, y + k) === "=" || get(i, y + k) === "."));
+      if (!toRoad && r() < 0.8) continue;
+      house(x, y, w, h, toRoad ? toRoad[2] : "down");
+    }
+  }
+  // any named buildings not placed yet take over houses
+  for (const rm of rooms) if (special.length && rm.name === houseName) { rm.name = special.shift(); const l = labels.find((l) => l.x === rm.x + 1 && l.y === rm.y + 1); if (l) { l.text = rm.name; l.public = true; } }
+
+  let altarPlaced = false;
+  if (landmarkAt) altarPlaced = ziggurat(landmarkAt[0], landmarkAt[1], zigSize, strip ? "left" : "down", p.features.includes("altar"));
+  if (!p.underground) for (let k = 0; k < 20; k++) { const x = ri(0, W - 1), y = ri(0, H - 1); if (get(x, y) === ",") set(x, y, r() < 0.7 ? "T" : "f"); }
+
+  return { w: W, h: H, cells: c.join(""), rooms, labels, theme: "town", seed, fog: "0".repeat(W * H), tokens: [], name: p.name || (p.underground ? "Underground town" : "Town"), altarPlaced };
+
+  // a stepped pyramid: ledges ring each tier, one stair runs up the side facing the street
+  function ziggurat(cx, cy, size, facing, withAltar) {
+    const k = size >> 1;
+    for (let y = cy - k - 1; y <= cy + k + 1; y++) for (let x = cx - k - 1; x <= cx + k + 1; x++) if (get(x, y) !== " ") set(x, y, ".");
+    for (let y = cy - k; y <= cy + k; y++) for (let x = cx - k; x <= cx + k; x++) {
+      const d = Math.max(Math.abs(x - cx), Math.abs(y - cy));
+      const onStair = facing === "left" ? x < cx && Math.abs(y - cy) <= 1 : y > cy && Math.abs(x - cx) <= 1;
+      if (d <= 1) set(x, y, ".");
+      else if ((k - d) % 2 === 0) set(x, y, onStair ? "S" : "#");
+      else set(x, y, onStair ? "S" : ".");
+    }
+    labels.push({ x: cx - k, y: cy - k - 1, text: "Ziggurat", public: true });
+    if (withAltar) { set(cx, cy, "t"); labels.push({ x: cx - 1, y: cy - 1, text: "Altar", public: false }); return true; }
+    return false;
+  }
 }
