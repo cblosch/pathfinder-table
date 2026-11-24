@@ -150,10 +150,10 @@ export async function gameInfo(code) {
   return { code, name: lob.name, gm: lob.gm, gmless: !!lob.gmless, slots: (pub.slots || []).map((s) => ({ ...s, mine: s.uid === uid })) };
 }
 
-export async function createGame(name, { gmless = false } = {}) {
+export async function createGame(name, { gmless = false, aiGM = false } = {}) {
   let code;
   for (let i = 0; i < 6; i++) { code = newCode(); if (!(await doc(`lobby/${code}`).get()).exists) break; }
-  const g = newGame(code, name, { gmless });
+  const g = newGame(code, name, { gmless, aiGM });
   delete g.dmKey;
   if (gmless) {
     await doc(`open/${code}`).set(splitMain(g, {}));

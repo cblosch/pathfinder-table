@@ -54,3 +54,20 @@ test("darkness: only light sources and darkvision let the party see", () => {
   assert.ok(partySight(m, () => "normal").has(2 * 9 + 2));
   assert.ok(!partySight(m, () => "normal").has(1 * 9 + 6)); // behind the wall
 });
+
+test("AI GM switch is for GM-less games; saved maps keep their light", async () => {
+  const { createGame, joinGame, applyAction, viewFor } = await import("../public/js/shared/game.js");
+  const g = createGame("AIGM01", "AI", { gmless: true, aiGM: true });
+  const { slot } = joinGame(g, { name: "Ann" });
+  const p = { role: "player", slot };
+  assert.equal(viewFor(g, p).aiGM, true);
+  applyAction(g, p, "setAIGM", { on: false });
+  assert.equal(g.aiGM, false);
+  applyAction(g, p, "chat", { text: "The door creaks open.", as: "Game Master" });
+  assert.equal(g.log.at(-1).who, "Game Master");
+  applyAction(g, p, "saveMap", { map: { name: "Chapel", w: 3, h: 1, cells: "...", ambient: "dim", lights: [{ x: 1, y: 0, r: 4 }], description: "a dim chapel" }, activate: true });
+  assert.equal(g.maps[0].ambient, "dim");
+  assert.equal(g.maps[0].lights.length, 1);
+  const gm = createGame("GM0001", "GM game");
+  assert.throws(() => applyAction(gm, { role: "dm" }, "setAIGM", { on: true }), /without a GM/);
+});

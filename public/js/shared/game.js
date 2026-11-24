@@ -17,7 +17,7 @@ export const newCode = () => Array.from(bytes(6), (b) => CODE_CHARS[b % 32]).joi
 export function createGame(code, name, opts = {}) {
   return {
     code, name: name || "New Campaign", createdAt: Date.now(), dmKey: secret(),
-    gmless: !!opts.gmless, autoReveal: !!opts.gmless,
+    gmless: !!opts.gmless, autoReveal: !!opts.gmless, aiGM: !!opts.gmless && !!opts.aiGM,
     plot: {
       title: "", synopsis: "", setting: "", partyLevel: 1, tone: "", hooks: "",
       acts: [], npcs: [], locations: [], factions: "", secrets: [], rewards: "",
@@ -66,7 +66,7 @@ export function viewFor(game, auth) {
   const activeMap = game.maps.find((m) => m.id === game.activeMapId);
   const shared = !!game.gmless;
   return {
-    code: game.code, name: game.name, gmless: shared,
+    code: game.code, name: game.name, gmless: shared, aiGM: !!game.aiGM,
     // Without a GM the whole table runs the story, so players get the plot (the UI hides spoilers).
     plot: shared ? game.plot : { title: game.plot.title, setting: game.plot.setting, partyLevel: game.plot.partyLevel },
     notes: shared ? game.notes : game.notes.filter((n) => n.public),
@@ -201,6 +201,13 @@ export function applyAction(game, auth, type, p = {}) {
     }
 
     // ----- plot & notes -----
+    case "setAIGM": {
+      // tables without a GM can hand the narration to the AI game master, or take it back
+      if (!game.gmless) throw new Error("Only games without a GM have an AI game master.");
+      game.aiGM = !!p.on;
+      pushLog(game, { type: "system", text: game.aiGM ? "The AI game master takes the table." : "The table runs the story itself again." });
+      return;
+    }
     case "setPlot": dmOnly(); game.plot = { ...game.plot, ...p.plot }; if (p.name) game.name = str(p.name, 120); return;
     case "addNote": {
       dmOnly();
@@ -230,7 +237,10 @@ export function applyAction(game, auth, type, p = {}) {
       if (m.w * m.h > 120 * 120) throw new Error("Map is too large.");
       const existing = game.maps.find((x) => x.id === m.id);
       const clean = { id: m.id || id(), name: str(m.name, 80), w: m.w, h: m.h, cells: m.cells, fog: m.fog || "0".repeat(m.w * m.h),
-        tokens: m.tokens || [], theme: m.theme || "dungeon", labels: m.labels || [], rooms: m.rooms || [], seed: m.seed, notes: str(m.notes) };
+        tokens: m.tokens || [], theme: m.theme || "dungeon", labels: m.labels || [], rooms: m.rooms || [], seed: m.seed, notes: str(m.notes),
+        ambient: AMBIENT[m.ambient] ? m.ambient : existing?.ambient || "bright",
+        lights: (m.lights || existing?.lights || []).slice(0, 200).map((l) => ({ id: l.id || id(), x: l.x | 0, y: l.y | 0, r: Math.max(1, Math.min(24, l.r | 0 || 4)) })),
+        description: str(m.description ?? existing?.description ?? "", 1500) };
       if (existing) Object.assign(existing, clean);
       else game.maps.push(clean);
       if (!game.activeMapId || p.activate) game.activeMapId = clean.id;

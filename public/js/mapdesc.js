@@ -56,6 +56,7 @@ export function tidyDescription(text) {
 }
 
 export function planFromText(text, { fallbackType = "dungeon", name = "" } = {}) {
+  const source = String(text || "").trim().slice(0, 1500);
   text = tidyDescription(text);
   const t = ` ${text} `;
   // type: the earliest strong match wins, so "a cave beneath the town" is a cave
@@ -105,6 +106,8 @@ export function planFromText(text, { fallbackType = "dungeon", name = "" } = {})
   const buildingKinds = BUILDING_KINDS.filter(([, re]) => re.test(t)).map(([n]) => n);
   // the free-form reading: things, counts, directions and how they relate
   const scene = parseScene(text);
+  // how lit the place is
+  const light = /\b(pitch[- ]?(black|dark)|unlit|lightless|dark|darkened|black as night)\b/.test(t) ? "dark" : /\b(dim|dimly|gloomy|twilight|dusk|night|moonlit|shadowy|candlelit|torchlit|firelit)\b/.test(t) ? "dim" : /\b(sunlit|sunny|bright|brightly|daylight|midday|noon|well[- ]lit|lamplit)\b/.test(t) ? "bright" : null;
   const has = (cpt) => scene.entities.some((e) => e.concept === cpt);
   // the scene places these itself, with their relations; the feature passes skip them
   const related = (cpt) => scene.entities.some((e) => e.concept === cpt && scene.relations.some((r) => r.a === e.id || r.b === e.id));
@@ -113,7 +116,7 @@ export function planFromText(text, { fallbackType = "dungeon", name = "" } = {})
   // a town's houses and shops come from the town builder, not as separate buildings
   if (type === "town") { const drop = new Set(scene.entities.filter((e) => e.concept === "hut").map((e) => e.id)); scene.entities = scene.entities.filter((e) => !drop.has(e.id)); scene.relations = scene.relations.filter((r) => !drop.has(r.a) && !drop.has(r.b)); }
   if (kept.includes("camp")) scene.entities = scene.entities.filter((e) => !(e.concept === "fire" && !scene.relations.some((r) => r.a === e.id || r.b === e.id)));
-  return normalizePlan({ type, size, rooms, buildings, features: kept, name, underground, layout, landmark, buildingKinds, direction, buildingNoun, place, where, riverAxis, scene });
+  return normalizePlan({ type, size, rooms, buildings, features: kept, name, underground, layout, landmark, buildingKinds, direction, buildingNoun, place, where, riverAxis, scene, light, source });
 }
 
 // Directions, including diagonals and plain-language sides
@@ -154,6 +157,8 @@ export function normalizePlan(p = {}) {
     buildingNoun: p.buildingNoun ? String(p.buildingNoun).slice(0, 20) : null, place: ["far", "center"].includes(p.place) ? p.place : null,
     where: Object.fromEntries(Object.entries(p.where || {}).filter(([k, v]) => DIR_NAMES[v] && (FEATURES[k] || k === "entrance" || k === "landmark"))),
     riverAxis: ["ns", "ew"].includes(p.riverAxis) ? p.riverAxis : null,
+    light: ["bright", "dim", "dark"].includes(p.light) ? p.light : null,
+    source: String(p.source || "").slice(0, 1500),
     scene: p.scene && Array.isArray(p.scene.entities) ? { entities: p.scene.entities.slice(0, 60), relations: (p.scene.relations || []).slice(0, 80) } : { entities: [], relations: [] },
   };
 }
@@ -195,6 +200,8 @@ export function mapFromPlan(plan, seed = Math.floor(Math.random() * 1e9)) {
   applyFeatures(m, p, r);
   placeScene(m, p.scene, r, { entranceDir: p.where?.entrance || null, outdoors: p.type === "wilderness" || p.type === "town" });
   m.plan = p;
+  m.description = p.source;
+  m.ambient = p.light || (p.type === "cave" || p.underground ? "dark" : p.type === "dungeon" ? "dim" : "bright");
   return m;
 }
 

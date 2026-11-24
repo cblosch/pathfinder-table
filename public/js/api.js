@@ -18,8 +18,8 @@ const authBody = () => (session.key ? { key: session.key } : { token: session.to
 
 export async function init() { return true; }
 
-export async function createGame(name, { gmless = false } = {}) {
-  const r = await api("/api/games", { method: "POST", body: { name, gmless } });
+export async function createGame(name, { gmless = false, aiGM = false } = {}) {
+  const r = await api("/api/games", { method: "POST", body: { name, gmless, aiGM } });
   // a GM-less game has no GM: its creator joins as a player like everyone else
   if (!gmless) remember(r.code, { key: r.key, name: name || "New Campaign", role: "gm" });
   return { ...r, gmless, key: gmless ? undefined : r.key };

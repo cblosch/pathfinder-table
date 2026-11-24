@@ -98,7 +98,7 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       let code;
       do code = newCode(); while (games.has(code));
-      const game = createGame(code, String(body.name || "").slice(0, 120), { gmless: !!body.gmless });
+      const game = createGame(code, String(body.name || "").slice(0, 120), { gmless: !!body.gmless, aiGM: !!body.aiGM });
       games.set(code, game);
       save(game);
       return send(res, 200, { code, key: game.dmKey });

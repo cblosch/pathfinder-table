@@ -2,7 +2,8 @@ import { h, clear, tabs, toast, copyText, modal, isMobile, onLayoutChange, actio
 import { planFromText, mapFromPlan } from "./mapdesc.js";
 import { shopsPanel } from "./shops.js";
 import { petsTab } from "./pets.js";
-import { act, connect, session, shareInfo, canPrint, isArtifact, onWaitingForGM, saveToLibrary, forget } from "./transport.js";
+import { act, connect, session, shareInfo, canPrint, isArtifact, onWaitingForGM, saveToLibrary, forget, config, askAI } from "./transport.js";
+import { aiGMTurn, aiGMBusy } from "./aigm.js";
 import { pickFromLibrary } from "./library.js";
 import { generateMap, MAP_TYPES } from "./map.js";
 import { encounterBuilder } from "./dmtools.js";
@@ -197,6 +198,33 @@ export function mountPlayer(app, { home } = {}) {
     { id: "rules", group: "reference", label: "Rules", icon: "📚", render: () => referencePanel({ isDM: false }) },
   ], { hoist: () => main.parentElement, persistKey: `pftable.ptab.${session.code}`, onChange: (id) => { if (id === "play") { seenLog = state.log.length; logPanel.scrollDown(); } drawHeader(); tabset.updateBar(); } });
 
+  let aiOn = null;
+  config().then((c) => { aiOn = !!c.ai; if (tabset?.current === "story") tabset.refresh(); }).catch(() => (aiOn = false));
+  // the AI GM writes an adventure whose places carry map descriptions
+  async function aiAdventure(lvl, btn) {
+    btn.disabled = true; btn.textContent = "The GM is writing…";
+    try {
+      const r = await askAI("adventure", `Party level ${lvl}. Party: ${Object.values(state.characters).map((c) => `${c.name} (${c.ancestry} ${c.class} ${c.level})`).join(", ") || "not built yet"}.`);
+      const m = r.text.match(/\{[\s\S]*\}/);
+      const plot = JSON.parse(m ? m[0] : r.text);
+      const uid = () => Math.random().toString(36).slice(2, 9);
+      for (const k of ["acts", "npcs", "locations", "secrets"]) plot[k] = (plot[k] || []).map((x) => ({ id: uid(), ...x }));
+      await act("setPlot", { plot: { ...plot, partyLevel: lvl } });
+      toast("The adventure is ready. Begin it in the Story tab.");
+    } catch (err) { toast("The GM's adventure couldn't be read. Try again, or roll a random one.", "error"); }
+    btn.disabled = false; btn.textContent = "✨ Have the AI GM write one";
+  }
+  async function gmTurn(text, btn, ask = null) {
+    const me = myChar();
+    if (btn) { btn.disabled = true; btn.dataset.label = btn.textContent; btn.textContent = "The GM is thinking…"; }
+    try {
+      const r = await aiGMTurn({ state, act, askAI, playerText: text, who: me ? `${me.name} (${me.ancestry} ${me.class})` : "A player", ask });
+      if (r.commands.some((x) => x.startsWith("map"))) toast("🗺 The GM drew a new map.");
+      if (r.commands.some((x) => x.startsWith("fight"))) toast("⚔ A fight begins. See initiative.");
+    } catch (err) { toast(err.message, "error"); }
+    if (btn) { btn.disabled = false; btn.textContent = btn.dataset.label; }
+  }
+
   function storyTab() {
     const p = state.plot || {};
     const box = h("div", { class: "story" });
@@ -206,11 +234,13 @@ export function mountPlayer(app, { home } = {}) {
         h("p", {}, "There's no GM, so the table picks the story. Everyone can read it, so the truth stays behind a spoiler fold."),
         h("div", { class: "row wrap" },
           h("button", { class: "primary", onclick: () => act("setPlot", { plot: { ...randomAdventure(lvl) } }) }, "🎲 Random adventure"),
-          h("button", { onclick: () => act("setPlot", { plot: { ...structuredClone(SAMPLE_PLOT), partyLevel: lvl } }) }, "The Lanterns of Hollowmere (sample)"))));
+          h("button", { onclick: () => act("setPlot", { plot: { ...structuredClone(SAMPLE_PLOT), partyLevel: lvl } }) }, "The Lanterns of Hollowmere (sample)"),
+          state.aiGM && aiOn ? h("button", { class: "primary", onclick: (e) => aiAdventure(lvl, e.target) }, "✨ Have the AI GM write one") : null)));
     } else {
       box.append(h("section", { class: "bsec" },
         h("h3", {}, p.title), p.setting ? h("p", {}, p.setting) : null, p.hooks ? h("p", {}, h("strong", {}, "Hook: "), p.hooks) : null,
-        h("details", { class: "spoiler" }, h("summary", {}, "Spoilers: what's really going on"),
+        // with an AI GM the truth is the GM's to reveal; the fold stays shut unless the table opens it on purpose
+        h("details", { class: "spoiler" }, h("summary", {}, state.aiGM ? "The GM's notes (spoilers, best left unread)" : "Spoilers: what's really going on"),
           p.synopsis ? h("p", {}, p.synopsis) : null,
           (p.npcs || []).length ? h("ul", {}, p.npcs.map((n) => h("li", {}, h("strong", {}, n.name), ` (${n.role || ""}): ${n.description || ""}`, n.secret ? h("em", { class: "secret" }, ` ${n.secret}`) : null))) : null,
           (p.secrets || []).length ? h("ul", {}, p.secrets.map((x) => h("li", {}, x.text))) : null),
@@ -219,11 +249,26 @@ export function mountPlayer(app, { home } = {}) {
         h("p", { class: "hint" }, "Tap a place to make its map and put the party there."),
         h("button", { class: "small", onclick: async () => (await confirmDialog("Start a different adventure? The current plot is replaced.", { ok: "Change adventure" })) && act("setPlot", { plot: { title: "", synopsis: "", setting: "", hooks: "", acts: [], npcs: [], locations: [], secrets: [] } }) }, "Change adventure")));
     }
+    // the AI game master
+    if (state.aiGM) {
+      const say = h("textarea", { id: "story-say", rows: 3, placeholder: "What do you do? e.g. I search the altar for hidden compartments." });
+      const send = h("button", { class: "primary", onclick: (e) => { const t = say.value.trim(); if (!t) return; say.value = ""; gmTurn(t, e.target); } }, "Tell the GM");
+      const started = state.log.some((l) => l.who === "Game Master");
+      box.append(h("section", { class: "bsec ai-gm" }, h("h3", {}, "The game master"),
+        aiOn === false ? h("p", { class: "warn" }, "The AI isn't available here, so the GM can't answer. Turn the AI GM off below to run the story yourselves.") : null,
+        say,
+        h("div", { class: "row wrap" }, send,
+          h("button", { onclick: (e) => gmTurn("", e.target, started ? null : `Begin the adventure${p.title ? ` “${p.title}”` : ""}: set the opening scene from the hook, put the party in the first location with a [MAP: ...] command, and ask what they do.`) }, started ? "Describe the scene" : "▶ Begin the adventure"),
+          h("button", { class: "small", onclick: async () => (await confirmDialog("Turn the AI game master off? The table runs the story itself (with the oracle) until you turn it back on.", { ok: "Turn it off" })) && act("setAIGM", { on: false }) }, "Turn the AI GM off")),
+        h("p", { class: "hint" }, "The GM answers in the chat, calls for checks with DCs (roll them from your sheet), builds the map when you reach somewhere new and starts the fights. Enemies take their turns from the initiative tracker.")));
+    } else if (aiOn) {
+      box.append(h("p", { class: "hint" }, "Want a narrator? ", h("button", { class: "small", onclick: () => act("setAIGM", { on: true }) }, "✨ Let an AI game master run the story")));
+    }
     // narrator
     const q = h("input", { id: "oracle-q", placeholder: "Yes/no question, e.g. Is the door locked?" });
     const odds = selectEl(["Almost certain", "Likely", "50/50", "Unlikely", "Very unlikely"], "50/50", () => {}, { id: "oracle-odds" });
     const me = myChar();
-    box.append(h("section", { class: "bsec" }, h("h3", {}, "Run the scene"),
+    if (!state.aiGM) box.append(h("section", { class: "bsec" }, h("h3", {}, "Run the scene"),
       h("p", { class: "hint" }, "Take turns describing what happens. When nobody knows the answer, ask the oracle; when things are too easy, roll a complication."),
       h("h4", {}, "Oracle"),
       h("div", { class: "row wrap" }, q, odds, h("button", { onclick: () => { act("oracle", { question: q.value.trim(), likelihood: odds.value }); q.value = ""; } }, "Ask"),

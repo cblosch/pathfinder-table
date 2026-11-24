@@ -60,7 +60,7 @@ async function landing(error) {
   const name = h("input", { id: "new-name", placeholder: "e.g. The Gloomwood Expedition", autocomplete: "off" });
   const code = h("input", { id: "join-code", placeholder: "ABC123", maxlength: 6, autocomplete: "off", autocapitalize: "characters", style: { textTransform: "uppercase" } });
   const recentBox = h("div", {});
-  let gmless = false;
+  let gmless = false, aiGM = false;
   app.append(
     h("div", { class: "landing" },
       h("div", { class: "row end landing-theme" }, themeToggle()),
@@ -77,14 +77,16 @@ async function landing(error) {
           h("h2", {}, "Start a game"),
           field("Campaign name", name),
           h("div", { class: "mode-pick", role: "radiogroup" },
-            h("label", { class: "mode-opt" }, h("input", { type: "radio", name: "mode", value: "gm", checked: true, onchange: () => (gmless = false) }),
+            h("label", { class: "mode-opt" }, h("input", { type: "radio", name: "mode", value: "gm", checked: true, onchange: () => { gmless = false; aiGM = false; } }),
               h("span", {}, h("strong", {}, "I'll be the GM"), h("small", {}, isArtifact ? "You run the game; players join with a code." : "You get a private GM link and a join code for players."))),
-            h("label", { class: "mode-opt" }, h("input", { type: "radio", name: "mode", value: "nogm", onchange: () => (gmless = true) }),
+            h("label", { class: "mode-opt" }, h("input", { type: "radio", name: "mode", value: "aigm", onchange: () => { gmless = true; aiGM = true; } }),
+              h("span", {}, h("strong", {}, "AI game master"), h("small", {}, "An AI GM writes the adventure, narrates what happens, calls for checks, builds each new location's map and starts the fights. Needs the AI to be available."))),
+            h("label", { class: "mode-opt" }, h("input", { type: "radio", name: "mode", value: "nogm", onchange: () => { gmless = true; aiGM = false; } }),
               h("span", {}, h("strong", {}, "No GM"), h("small", {}, "Everyone plays and shares the GM's jobs: the map reveals as you explore, enemies take their own turns, and an oracle answers questions.")))),
           h("button", { class: "primary", onclick: async (e) => {
             e.target.disabled = true;
             try {
-              const r = await createGame(name.value.trim(), { gmless });
+              const r = await createGame(name.value.trim(), { gmless, aiGM });
               if (r.gmless) go("join", r.code);
               else go("gm", r.code, { key: r.key, role: "gm" });
             } catch (err) { toast(err.message, "error"); e.target.disabled = false; }
